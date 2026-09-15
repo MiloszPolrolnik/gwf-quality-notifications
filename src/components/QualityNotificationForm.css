@@ -1,0 +1,189 @@
+.qn-page {
+  background: #ffffff;
+  color: #000000;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  width: 210mm;
+  height: 297mm;
+  max-width: 100%;
+  margin: 0 auto 24px;
+  padding: 12mm 10mm;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.qn-header-row {
+  position: relative;
+}
+
+.qn-header-filename {
+  font-size: 9px;
+}
+
+.qn-header-logo {
+  position: absolute;
+  top: -30px;
+  right: 0;
+  height: 50px;
+  object-fit: contain;
+}
+
+.qn-header-rule {
+  border-bottom: 0.5pt solid #000;
+  margin: 7px 0 12px;
+}
+
+.qn-title {
+  font-size: 20px;
+  font-weight: 400;
+  margin: 0 0 14px;
+}
+
+.qn-title-sub {
+  font-size: 15px;
+}
+
+.qn-footer-rule {
+  border-top: 0.5px solid #000;
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.qn-footer-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  padding-top: 4px;
+}
+
+.qn-footer-row2 {
+  font-size: 8px;
+}
+
+.qn-table {
+  border: 1.5px solid #000;
+}
+
+.qn-section {
+  display: flex;
+}
+
+.qn-num-col {
+  width: 28px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.qn-num-cell {
+  flex: 0 0 auto;
+  border: 1px solid #000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  font-weight: bold;
+  padding-top: 4px;
+  box-sizing: border-box;
+  height: var(--num-cell-height, auto);
+}
+
+/* Height of the number cell for each section that has a "To be filled out
+   by applicant" label below it - this is what positions the dividing line
+   under the digit. Bump the value up/down to move that line. */
+.qn-num-cell--s1 {
+  --num-cell-height: 32.48px;
+}
+
+.qn-num-cell--s2 {
+  --num-cell-height: 19.8px;
+}
+
+.qn-num-cell--s3 {
+  --num-cell-height: 19.8px;
+}
+
+.qn-num-cell-fill {
+  flex: 1 1 auto;
+}
+
+.qn-label-cell {
+  flex: 1 1 auto;
+  border: 1px solid #000;
+  border-top: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.qn-label-cell span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-style: italic;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.qn-content-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+.qn-cell {
+  border: 1px solid #000;
+  padding: 3px 5px;
+  box-sizing: border-box;
+}
+
+.qn-row {
+  display: flex;
+}
+
+.qn-bold {
+  font-weight: bold;
+}
+
+.qn-small {
+  font-size: 8.5px;
+}
+
+.qn-checkbox-row {
+  display: flex;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.qn-checkbox {
+  width: 10px;
+  height: 10px;
+  border: 1px solid #000;
+  margin-right: 6px;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+
+.qn-dotted {
+  border-bottom: 1px dotted #000;
+  height: 1px;
+  flex: 1 1 auto;
+  margin: 6px 0;
+}
+
+.qn-content-box {
+  min-height: 100px;
+}
+
+.qn-content-box-lg {
+  min-height: 132px;
+}
+
+.qn-indent-1 {
+  padding-left: 24px;
+}
+
+.qn-indent-2 {
+  padding-left: 48px;
+}
