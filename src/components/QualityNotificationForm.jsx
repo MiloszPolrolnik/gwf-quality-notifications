@@ -1,6 +1,11 @@
 import React from 'react'
 import './QualityNotificationForm.css'
 
+// The source table separates sections 7/8 and 8/9 with a blank, unbordered
+// gap (measured off the DOCX render at ~8.3pt, i.e. ~11px at 96dpi) instead
+// of a shared border - every other section boundary sits flush with no gap.
+const SECTION_GAP_PX = 11
+
 const today = new Date()
 const todayStr = `${String(today.getDate()).padStart(2, '0')}.${String(
   today.getMonth() + 1,
@@ -232,12 +237,12 @@ function Section6() {
 
 function InfoRow({ label, caption }) {
   return (
-    <div className="qn-row">
-      <div className="qn-cell" style={{ flex: 1 }}>
+    <div className="qn-cell" style={{ display: 'flex' }}>
+      <div style={{ flex: 1 }}>
         <div className="qn-bold">{label}</div>
         <div className="qn-small">{caption}</div>
       </div>
-      <div className="qn-cell" style={{ width: 170, display: 'flex', alignItems: 'center' }}>
+      <div style={{ width: 170, display: 'flex', alignItems: 'center' }}>
         <Checkbox label="ja / yes" className="" />
         <span style={{ width: 16 }} />
         <Checkbox label="nein / no" />
@@ -273,7 +278,7 @@ const SIG_COLS = [
 function Section8() {
   const otherWidth = `${88 / 6}%`
   return (
-    <div className="qn-section" style={{ marginTop: 6 }}>
+    <div className="qn-section">
       <div className="qn-num-col">
         <div className="qn-num-cell qn-num-cell-fill">8</div>
       </div>
@@ -303,14 +308,17 @@ function Section8() {
             </div>
           ))}
         </div>
-        <div className="qn-cell qn-small" style={{ padding: '2px 5px' }}>
-          <div>* Release only valid with signature of the Management Board + Quality Management</div>
-          <div>** In case the sales department is required to be informed</div>
-        </div>
       </div>
     </div>
   )
 }
+
+// Column widths for sections 9 and 10 - taken from the source DOCX table grid
+// (gridCol values 4396/2690/2567 of 9653 total) so the two rows' dividers
+// line up exactly, the way they do in the original.
+const S9_10_W1 = '45.54%'
+const S9_10_W2 = '27.87%'
+const S9_10_W3 = '26.59%'
 
 function Section9() {
   return (
@@ -319,11 +327,11 @@ function Section9() {
         <div className="qn-num-cell qn-num-cell-fill">9</div>
       </div>
       <div className="qn-row" style={{ flex: 1 }}>
-        <div className="qn-cell qn-bold" style={{ width: '50%', minHeight: 40 }}>
+        <div className="qn-cell qn-bold" style={{ width: S9_10_W1, minHeight: 40 }}>
           Customer approval <span style={{ fontWeight: 'normal' }}>(if applicable)</span>
         </div>
-        <div className="qn-cell qn-bold" style={{ width: '25%', minHeight: 40 }}>Name</div>
-        <div className="qn-cell qn-bold" style={{ width: '25%', minHeight: 40 }}>Signature</div>
+        <div className="qn-cell qn-bold" style={{ width: S9_10_W2, minHeight: 40 }}>Name</div>
+        <div className="qn-cell qn-bold" style={{ width: S9_10_W3, minHeight: 40 }}>Signature</div>
       </div>
     </div>
   )
@@ -336,10 +344,13 @@ function Section10() {
         <div className="qn-num-cell qn-num-cell-fill">10</div>
       </div>
       <div className="qn-row" style={{ flex: 1 }}>
-        <div className="qn-cell qn-bold" style={{ width: '45%', minHeight: 40 }}>Check Execution/Completion</div>
-        <div className="qn-cell qn-bold" style={{ width: '25%', minHeight: 40 }}>Signature</div>
-        <div className="qn-cell" style={{ width: '30%', minHeight: 40 }}>
-          <Checkbox label="Status completed   ja / yes" />
+        <div className="qn-cell qn-bold" style={{ width: S9_10_W1, minHeight: 40 }}>Check Execution/Completion</div>
+        <div className="qn-cell qn-bold" style={{ width: S9_10_W2, minHeight: 40 }}>Signature</div>
+        <div className="qn-cell" style={{ width: S9_10_W3, minHeight: 40, display: 'flex', alignItems: 'center' }}>
+          <span className="qn-bold">Status completed</span>
+          <span style={{ flex: 1 }} />
+          <span>ja / yes&nbsp;&nbsp;</span>
+          <span className="qn-checkbox" />
         </div>
       </div>
     </div>
@@ -362,10 +373,25 @@ export default function QualityNotificationForm() {
       </div>
       <div className="qn-page">
         <Header withTitle={false} />
+        {/* Sections 6/7 and 9/10 each share one continuous table border (they
+            sit flush with no gap), but the source table draws a genuinely
+            empty, unbordered gap before section 8 and before section 9 - so
+            each group gets its own bordered table, and the gap is plain
+            margin between them, not a border-wrapped blank row. */}
         <div className="qn-table" style={{ marginTop: 20 }}>
           <Section6 />
           <Section7 />
+        </div>
+        <div className="qn-table" style={{ marginTop: SECTION_GAP_PX }}>
           <Section8 />
+        </div>
+        {/* Source doc: these two lines sit as plain body text below section
+            8's table - no border, flush with the table's own left edge. */}
+        <div className="qn-small" style={{ fontStyle: 'italic', marginTop: 3, marginLeft: 0, paddingLeft: 0 }}>
+          <div>* Release only valid with signature of the Management Board + Quality Management</div>
+          <div>** In case the sales department is required to be informed</div>
+        </div>
+        <div className="qn-table" style={{ marginTop: SECTION_GAP_PX }}>
           <Section9 />
           <Section10 />
         </div>

@@ -35,6 +35,11 @@ const S1_BATCHQTY_W = CONTENT_COL_W * (78 / 482.4)
 const BORDER = 0.5
 const FONT_SIZE = 8
 
+// The source table separates sections 7/8 and 8/9 with a blank, unbordered
+// gap (measured off the DOCX render at ~8.3pt) instead of a shared border -
+// every other section boundary sits flush with no gap at all.
+const SECTION_GAP = 8.3
+
 const today = new Date()
 const todayStr = `${String(today.getDate()).padStart(2, '0')}.${String(
   today.getMonth() + 1,
@@ -526,74 +531,63 @@ function Section8() {
   const otherW = (CONTENT_COL_W - fixedW) / (SIG_COLS.length - 1)
 
   return (
-    <>
-      <View style={[styles.sectionRow, { marginTop: 5 }]}>
-        <SectionNum n={8} />
-        <View style={styles.contentCol}>
-          <View style={{ flexDirection: 'row' }}>
-            {SIG_COLS.map((c, i) => (
-              <View
-                key={c.key}
-                style={[
-                  styles.cell,
-                  i === SIG_COLS.length - 1 ? styles.flush : null,
-                  { width: i === 0 ? fixedW : otherW, height: 34, justifyContent: 'center' },
-                ]}
-              >
-                {c.label ? (
-                  <Text
-                    style={{
-                      fontFamily: c.italic ? 'Helvetica-BoldOblique' : 'Helvetica-Bold',
-                      textAlign: 'center',
-                      fontSize: 7,
-                    }}
-                  >
-                    {c.label}
-                  </Text>
-                ) : null}
-              </View>
-            ))}
-          </View>
-          <View style={{ flexDirection: 'row' }}>
-            {SIG_COLS.map((c, i) => (
-              <View
-                key={c.key}
-                style={[
-                  styles.cell,
-                  i === SIG_COLS.length - 1 ? styles.flush : null,
-                  { width: i === 0 ? fixedW : otherW, height: 20 },
-                ]}
-              >
-                {i === 0 ? <Text style={styles.bold}>Signature</Text> : null}
-              </View>
-            ))}
-          </View>
-          <View style={{ flexDirection: 'row' }}>
-            {SIG_COLS.map((c, i) => (
-              <View
-                key={c.key}
-                style={[
-                  styles.cell,
-                  i === SIG_COLS.length - 1 ? styles.flush : null,
-                  { width: i === 0 ? fixedW : otherW, height: 20 },
-                ]}
-              >
-                {i === 0 ? <Text style={styles.bold}>Date</Text> : null}
-              </View>
-            ))}
-          </View>
+    <View style={styles.sectionRow}>
+      <SectionNum n={8} />
+      <View style={styles.contentCol}>
+        <View style={{ flexDirection: 'row' }}>
+          {SIG_COLS.map((c, i) => (
+            <View
+              key={c.key}
+              style={[
+                styles.cell,
+                i === SIG_COLS.length - 1 ? styles.flush : null,
+                { width: i === 0 ? fixedW : otherW, height: 34, justifyContent: 'center' },
+              ]}
+            >
+              {c.label ? (
+                <Text
+                  style={{
+                    fontFamily: c.italic ? 'Helvetica-BoldOblique' : 'Helvetica-Bold',
+                    textAlign: 'center',
+                    fontSize: 7,
+                  }}
+                >
+                  {c.label}
+                </Text>
+              ) : null}
+            </View>
+          ))}
+        </View>
+        <View style={{ flexDirection: 'row' }}>
+          {SIG_COLS.map((c, i) => (
+            <View
+              key={c.key}
+              style={[
+                styles.cell,
+                i === SIG_COLS.length - 1 ? styles.flush : null,
+                { width: i === 0 ? fixedW : otherW, height: 20 },
+              ]}
+            >
+              {i === 0 ? <Text style={styles.bold}>Signature</Text> : null}
+            </View>
+          ))}
+        </View>
+        <View style={{ flexDirection: 'row' }}>
+          {SIG_COLS.map((c, i) => (
+            <View
+              key={c.key}
+              style={[
+                styles.cell,
+                i === SIG_COLS.length - 1 ? styles.flush : null,
+                { width: i === 0 ? fixedW : otherW, height: 20 },
+              ]}
+            >
+              {i === 0 ? <Text style={styles.bold}>Date</Text> : null}
+            </View>
+          ))}
         </View>
       </View>
-      {/* The source table leaves these two footnote lines unboxed, floating
-          below the signature grid rather than inside its border - the visual
-          gap before section 9 comes from this text, not from a margin. */}
-      <Text style={[styles.footnote, { marginTop: 1 }]}>
-        * Release only valid with signature of the Management Board + Quality Management
-      </Text>
-      <Text style={[styles.footnote, { marginTop: 1 }]}>
-        ** In case the sales department is required to be informed
-      </Text>
-    </>
+    </View>
   )
 }
 
@@ -605,7 +599,7 @@ function Section9() {
   const w2 = CONTENT_COL_W * 0.279
   const w3 = CONTENT_COL_W * 0.266
   return (
-    <View style={[styles.sectionRow, { marginTop: 2 }]}>
+    <View style={styles.sectionRow}>
       <SectionNum n={9} />
       <View style={{ flexDirection: 'row' }}>
         <View style={[styles.cell, styles.bold, { width: w1, height: 34 }]}>
@@ -641,8 +635,17 @@ function Section10() {
         <View style={[styles.cell, styles.bold, { width: w2, height: 34 }]}>
           <Text>Signature</Text>
         </View>
-        <View style={[styles.cell, styles.flush, { width: w3, height: 34 }]}>
-          <Checkbox label="Status completed   ja / yes" />
+        <View
+          style={[
+            styles.cell,
+            styles.flush,
+            { width: w3, height: 34, flexDirection: 'row', alignItems: 'center' },
+          ]}
+        >
+          <Text style={styles.bold}>Status completed</Text>
+          <View style={{ flexGrow: 1 }} />
+          <Text>ja / yes{'  '}</Text>
+          <View style={styles.checkboxSquare} />
         </View>
       </View>
     </View>
@@ -668,10 +671,27 @@ export default function QualityNotificationPdf({ logoSrc = '/gwf-logo.png' }) {
       </Page>
       <Page size="A4" style={styles.page}>
         <FormHeader logoSrc={logoSrc} withTitle={false} />
+        {/* Sections 6/7 and 9/10 each share one continuous table border (they
+            sit flush with no gap), but the source table draws a genuinely
+            empty, unbordered gap before section 8 and before section 9 - so
+            each group gets its own bordered table, and the gap is plain
+            margin between them, not a border-wrapped blank row. */}
         <View style={[styles.table, { marginTop: 16 }]}>
           <Section6 />
           <Section7 />
+        </View>
+        <View style={[styles.table, { marginTop: SECTION_GAP }]}>
           <Section8 />
+        </View>
+        {/* Source doc: these two lines sit as plain body text below section
+            8's table - no border, flush with the table's own left edge. */}
+        <Text style={[styles.footnote, { fontStyle: 'italic', marginTop: 3 }]}>
+          * Release only valid with signature of the Management Board + Quality Management
+        </Text>
+        <Text style={[styles.footnote, { fontStyle: 'italic' }]}>
+          ** In case the sales department is required to be informed
+        </Text>
+        <View style={[styles.table, { marginTop: SECTION_GAP }]}>
           <Section9 />
           <Section10 />
         </View>
