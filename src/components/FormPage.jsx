@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n.jsx'
 import { emptyData, formatDate, pdfFileName } from '../pdf/data.js'
 import { AutoTextarea, Block, Check, TextField, Field, YesNoField } from './fields.jsx'
@@ -7,6 +7,7 @@ import PdfPreview, { renderPdfBlob } from './PdfPreview.jsx'
 import { api } from '../api.js'
 
 const STORE = 'qn-form-v1'
+const AUTOSAVE_DELAY = 2000
 
 const fresh = () => ({ ...structuredClone(emptyData), date: formatDate() })
 
@@ -48,6 +49,113 @@ export default function FormPage({ id, onBack, onDone }) {
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState(null) // { kind: 'ok' | 'error', text }
   const [showPreview, setShowPreview] = useState(false) // mobile only
+  const [auto, setAuto] = useState(null) // { kind: 'saving' | 'saved' | 'error', time? }
+
+  // Autosave bookkeeping lives in refs so unmount / pagehide handlers see current values.
+  const dataRef = useRef(data)
+  const idRef = useRef(recordId)
+  const statusRef = useRef(null)
+  const loadingRef = useRef(loading)
+  const savedRef = useRef(JSON.stringify(fresh())) // JSON of the last state known to be on the server
+  const chainRef = useRef(Promise.resolve()) // serialises saves so a pending POST is never duplicated
+  const mountedRef = useRef(false)
+  const beaconRef = useRef('')
+  dataRef.current = data
+  loadingRef.current = loading
+
+  const clearStore = () => {
+    try {
+      localStorage.removeItem(STORE)
+    } catch {
+      /* ignore */
+    }
+  }
+  const enqueue = (job) => {
+    const p = chainRef.current.then(job)
+    chainRef.current = p.catch(() => {})
+    return p
+  }
+  // Called once a new record got its id: sync state and URL (only while this page is still shown).
+  const adoptId = (newId) => {
+    if (!mountedRef.current) return
+    setRecordId(newId)
+    history.replaceState(null, '', `#/form/${newId}`)
+  }
+  // Runs `write` in the save queue; returns the saved row.
+  const persist = (target, json, write) =>
+    enqueue(async () => {
+      const wasNew = !idRef.current
+      const row = await write(idRef.current)
+      idRef.current = row.id
+      savedRef.current = json
+      statusRef.current = target
+      clearStore()
+      if (wasNew) adoptId(row.id)
+      return row
+    })
+
+  // Saves unsaved changes as a draft. Never touches completed records or empty new forms.
+  function autosave() {
+    if (loadingRef.current || statusRef.current === 'completed') return Promise.resolve()
+    const snapshot = dataRef.current
+    const json = JSON.stringify(snapshot)
+    if (json === savedRef.current) return Promise.resolve()
+    if (!idRef.current && json === JSON.stringify(fresh())) return Promise.resolve()
+    const safe = (v) => mountedRef.current && setAuto(v)
+    safe({ kind: 'saving' })
+    return persist('draft', json, (rid) => (rid ? api.update(rid, 'draft', snapshot) : api.create('draft', snapshot)))
+      .then(() => safe({ kind: 'saved', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }))
+      .catch(() => safe({ kind: 'error' }))
+  }
+
+  // Debounced autosave after the last change.
+  useEffect(() => {
+    if (loading) return
+    const timer = setTimeout(autosave, AUTOSAVE_DELAY)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, loading])
+
+  // Save immediately when leaving the form (Back, hash navigation, browser back).
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      autosave()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Tab close / reload: warn about unsaved changes and send a keepalive save.
+  useEffect(() => {
+    const isDirty = () => {
+      if (loadingRef.current) return false
+      const json = JSON.stringify(dataRef.current)
+      return json !== savedRef.current && (idRef.current || json !== JSON.stringify(fresh()))
+    }
+    const onBeforeUnload = (e) => {
+      if (!isDirty()) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    const onPageHide = () => {
+      if (!isDirty() || statusRef.current === 'completed') return
+      // keepalive requests are capped at ~64 KB: images are left out (the server keeps stored ones).
+      const { images, ...rest } = dataRef.current // eslint-disable-line no-unused-vars
+      const json = JSON.stringify(rest)
+      if (json === beaconRef.current) return
+      beaconRef.current = json
+      const rid = idRef.current
+      if (rid) api.updateKeepalive(rid, { ...rest, images: [] })
+      else api.createKeepalive({ ...rest, images: [] })
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      window.removeEventListener('pagehide', onPageHide)
+    }
+  }, [])
 
   // Open an existing notification from the database.
   useEffect(() => {
@@ -57,7 +165,10 @@ export default function FormPage({ id, onBack, onDone }) {
       .get(id)
       .then((row) => {
         if (cancelled) return
-        setData(normalize(row.data, true))
+        const loaded = normalize(row.data, true)
+        savedRef.current = JSON.stringify(loaded)
+        statusRef.current = row.status
+        setData(loaded)
         setStatus(row.status)
         setLoading(false)
       })
@@ -129,28 +240,28 @@ export default function FormPage({ id, onBack, onDone }) {
     }
     setSaving(true)
     try {
-      const row = recordId ? await api.update(recordId, target, data) : await api.create(target, data)
-      try {
-        localStorage.removeItem(STORE)
-      } catch {
-        /* ignore */
-      }
+      const snapshot = data
+      await persist(target, JSON.stringify(snapshot), (rid) =>
+        rid ? api.update(rid, target, snapshot) : api.create(target, snapshot),
+      )
       if (target === 'completed') {
         onDone('completed')
         return
       }
       setStatus('draft')
-      if (!recordId) {
-        setRecordId(row.id)
-        // keep the URL in sync without triggering a reload of the record
-        history.replaceState(null, '', `#/form/${row.id}`)
-      }
       setNotice({ kind: 'ok', text: t('draftSaved') })
     } catch (e) {
       setNotice({ kind: 'error', text: e.status === 422 ? t('missingFields') : t('saveError') })
     } finally {
       setSaving(false)
     }
+  }
+
+  // Back waits for the pending save so the drafts list already shows the result.
+  async function goBack() {
+    await autosave()
+    await chainRef.current
+    onBack()
   }
 
   // The preview only re-renders when the debounced value changes.
@@ -172,7 +283,7 @@ export default function FormPage({ id, onBack, onDone }) {
     <div className={`form-page ${showPreview ? 'show-preview' : ''}`}>
       <div className="form-col">
         <div className="form-head">
-          <button type="button" className="btn ghost" onClick={onBack}>
+          <button type="button" className="btn ghost" onClick={goBack}>
             ← {t('back')}
           </button>
           <h1>{recordId ? `${t('formTitle')} #${recordId}` : t('formTitle')}</h1>
@@ -261,6 +372,11 @@ export default function FormPage({ id, onBack, onDone }) {
           <YesNoField label={t('infoCustomer')} value={data.infoCustomer} onChange={set('infoCustomer')} yes={t('yes')} no={t('no')} />
         </Block>
 
+        {auto && status !== 'completed' && (
+          <p className={auto.kind === 'error' ? 'error' : 'note'} style={{ fontSize: 12, margin: '4px 0' }}>
+            {auto.kind === 'saving' ? t('autoSaving') : auto.kind === 'saved' ? `${t('autoSaved')} ${auto.time}` : t('autoError')}
+          </p>
+        )}
         {notice && <p className={notice.kind === 'ok' ? 'note ok' : 'error'}>{notice.text}</p>}
         <div className="actions">
           {status !== 'completed' && (

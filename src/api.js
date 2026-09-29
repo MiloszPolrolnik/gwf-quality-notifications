@@ -16,6 +16,20 @@ async function request(path, options) {
   return body
 }
 
+// Fire-and-forget saves for pagehide: keepalive lets them outlive the page.
+function keepalive(path, method, body) {
+  try {
+    fetch(`/api${path}`, {
+      method,
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {})
+  } catch {
+    /* fetch unavailable */
+  }
+}
+
 export const api = {
   list: ({ status, q } = {}) => {
     const params = new URLSearchParams()
@@ -27,5 +41,8 @@ export const api = {
   create: (status, data) => request('/notifications', { method: 'POST', body: JSON.stringify({ status, data }) }),
   update: (id, status, data) =>
     request(`/notifications/${id}`, { method: 'PUT', body: JSON.stringify({ status, data }) }),
+  // keepImages: the payload omits images, so the server keeps the stored ones.
+  updateKeepalive: (id, data) => keepalive(`/notifications/${id}`, 'PUT', { status: 'draft', data, keepImages: true }),
+  createKeepalive: (data) => keepalive('/notifications', 'POST', { status: 'draft', data }),
   remove: (id) => request(`/notifications/${id}`, { method: 'DELETE' }),
 }

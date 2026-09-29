@@ -67,6 +67,11 @@ app.put('/api/notifications/:id', (req, res) => {
   if (id === null) return
   const parsed = parseBody(req.body)
   if (parsed.error) return res.status(parsed.code || 400).json(parsed)
+  if (req.body.keepImages) {
+    const current = db.get(id)
+    if (current?.status === 'completed') return res.status(409).json({ error: 'completed notifications cannot be autosaved' })
+    if (current) parsed.data.images = current.data?.images ?? []
+  }
   const row = db.update(id, parsed)
   if (!row) return res.status(404).json({ error: 'not found' })
   res.json(row)
