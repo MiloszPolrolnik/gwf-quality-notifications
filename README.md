@@ -14,11 +14,16 @@ or a database — those are later stages).
 
 ## Structure
 
-- `src/components/QualityNotificationForm.jsx` — on-screen form preview (HTML/CSS)
-- `src/pdf/QualityNotificationPdf.jsx` — layout for PDF generation
-- `src/App.jsx` — preview + "Download empty PDF form" button
-- `public/gwf-logo.png` — **placeholder** GWF logo (replace with the final file)
-- `docs/` — original reference files (PDF/DOCX)
+- `src/App.jsx` - landing page ("Fill out the form"), hash routing, EN/DE switch
+- `src/i18n.jsx` - dictionary + React context (UI only; the PDF is never translated)
+- `src/components/FormPage.jsx` - form for sections 1-7, live preview, download
+- `src/pdf/QualityNotificationPdf.jsx` - the PDF document (data-driven, used for preview *and* download)
+- `src/pdf/geometry.js` - all measured template geometry (pt), one source of truth
+- `src/pdf/primitives.jsx`, `src/pdf/sections/*` - cells, rows, checkboxes, one component per section
+- `public/fonts` - Arimo (metric-compatible with Arial), loaded locally
+- `tools/` - verification: `render.mjs` (render scenarios in node), `extract2.py` (geometry of the
+  original), `compare.py` / `diff.py` / `boxes2.py` (numeric + image diff against the original PDF)
+- `docs/samples/` - rendered test scenarios (empty / long text / images)
 
 ## Running
 

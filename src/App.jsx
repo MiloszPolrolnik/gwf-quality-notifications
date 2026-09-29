@@ -1,90 +1,55 @@
-import React, { useState } from 'react'
-import { pdf } from '@react-pdf/renderer'
-import QualityNotificationForm from './components/QualityNotificationForm.jsx'
-import QualityNotificationPdf from './pdf/QualityNotificationPdf.jsx'
-import { translations, languages } from './i18n.js'
+import React, { useEffect, useState } from 'react'
+import { I18nProvider, useI18n } from './i18n.jsx'
+import LanguageSwitch from './components/LanguageSwitch.jsx'
+import FormPage from './components/FormPage.jsx'
 
-const TOOLBAR_HEIGHT = 56
+const BASE = import.meta.env.BASE_URL
 
-export default function App() {
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [lang, setLang] = useState('en')
-  const t = translations[lang]
-
-  async function handleDownload() {
-    setIsGenerating(true)
-    try {
-      const blob = await pdf(<QualityNotificationPdf />).toBlob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = 'DL05-F0987 - Quality Notification (empty).pdf'
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
-    } finally {
-      setIsGenerating(false)
-    }
+function Shell() {
+  const { t } = useI18n()
+  // Tiny hash router: "#/form" opens the form, anything else the landing page.
+  const [route, setRoute] = useState(() => (location.hash === '#/form' ? 'form' : 'landing'))
+  useEffect(() => {
+    const on = () => setRoute(location.hash === '#/form' ? 'form' : 'landing')
+    window.addEventListener('hashchange', on)
+    return () => window.removeEventListener('hashchange', on)
+  }, [])
+  useEffect(() => {
+    document.title = t('appTitle')
+  })
+  const go = (r) => {
+    location.hash = r === 'form' ? '#/form' : '#/'
   }
 
   return (
-    <div>
-      <div
-        style={{
-          position: 'sticky',
-          top: 0,
-          height: TOOLBAR_HEIGHT,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 20px',
-          background: '#ffffff',
-          borderBottom: '1px solid #ccc',
-          zIndex: 10,
-        }}
-      >
-        <strong>{t.toolbar.title}</strong>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {languages.map((l) => (
-              <button
-                key={l.code}
-                onClick={() => setLang(l.code)}
-                style={{
-                  padding: '6px 12px',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  background: lang === l.code ? '#1a3e6f' : '#ffffff',
-                  color: lang === l.code ? '#fff' : '#1a3e6f',
-                  border: '1px solid #1a3e6f',
-                  borderRadius: 4,
-                }}
-              >
-                {l.label}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={handleDownload}
-            disabled={isGenerating}
-            style={{
-              padding: '8px 16px',
-              fontSize: 14,
-              cursor: isGenerating ? 'default' : 'pointer',
-              background: '#1a3e6f',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 4,
-            }}
-          >
-            {isGenerating ? t.toolbar.generating : t.toolbar.download}
+    <div className="app">
+      <header className="topbar">
+        <a className="brand" href="#/">
+          <img src={`${BASE}gwf-logo.png`} alt="GWF" />
+          <span>{t('appTitle')}</span>
+        </a>
+        <LanguageSwitch />
+      </header>
+      {route === 'form' ? (
+        <FormPage onBack={() => go('landing')} />
+      ) : (
+        <main className="landing">
+          <h1>{t('landingTitle')}</h1>
+          <p className="sub">{t('landingSub')}</p>
+          <p>{t('landingText')}</p>
+          <button type="button" className="btn primary big" onClick={() => go('form')}>
+            {t('fillOut')}
           </button>
-        </div>
-      </div>
-      <div style={{ padding: '20px 0' }}>
-        <QualityNotificationForm />
-      </div>
+        </main>
+      )}
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <I18nProvider>
+      <Shell />
+    </I18nProvider>
   )
 }

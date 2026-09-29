@@ -4,3 +4,4 @@ dist
 *.local
 scripts/.generate-pdf.bundle.mjs
 quality-notification-empty.pdf
+.work/

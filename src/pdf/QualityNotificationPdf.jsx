@@ -1,704 +1,144 @@
 import React from 'react'
-import { Document, Page, View, Text, Image, StyleSheet, Font } from '@react-pdf/renderer'
+import { Document, Page, View, Text, Image } from '@react-pdf/renderer'
+import { FONT_FAMILY } from './fonts.js'
+import { DEFAULT_HEADER_TITLE, emptyData, formatDate } from './data.js'
+import {
+  PAGE_W,
+  PAGE_H,
+  PAGE_TOP,
+  CONTENT_BOTTOM,
+  FONT_SIZE,
+  LINE_HEIGHT,
+  RULE_LEFT,
+  RULE_RIGHT,
+  TABLE_LEFT,
+  NUM_W,
+  CONTENT_W,
+  HEADER_RULE_Y,
+  FOOTER_RULE_Y,
+  HEADER_TEXT_TOP,
+  LOGO,
+  BLACK,
+  W_THIN,
+  PAGE1_TABLE_TOP,
+} from './geometry.js'
+import { clean } from './primitives.jsx'
+import Section1 from './sections/Section1.jsx'
+import Section2 from './sections/Section2.jsx'
+import Section3 from './sections/Section3.jsx'
+import Section4 from './sections/Section4.jsx'
+import Section5 from './sections/Section5.jsx'
+import Section6 from './sections/Section6.jsx'
+import Section7 from './sections/Section7.jsx'
+import Section8 from './sections/Section8.jsx'
+import Section9_10 from './sections/Section9_10.jsx'
 
-// Disable automatic word-hyphenation so narrow header cells wrap on spaces only
-Font.registerHyphenationCallback((word) => [word])
+const RULE_W = RULE_RIGHT - RULE_LEFT
+const TABLE_W = NUM_W + CONTENT_W
+const abs = (left, top, extra) => ({ position: 'absolute', left, top, ...extra })
 
-// ---------------------------------------------------------------------------
-// Layout constants (all values in pt; A4 = 595.28 x 841.89 pt)
-// ---------------------------------------------------------------------------
-const PAGE_PADDING = 24
-const CONTENT_WIDTH = 595.28 - PAGE_PADDING * 2
+// Vertical offsets between a text's glyph top (as measured in the template)
+// and the top of its react-pdf line box.
+const HEADER_DY = 0.89
+const FOOTER_DY = 0.89
 
-// Column ratios below are taken directly from the source DOCX's table grid
-// (word/document.xml tcW values), not eyeballed from the rendered PDF. There
-// is a single left-hand column (num) shared by every section: for sections
-// 1-3 it holds the section number for just the header row, then a
-// vertically-merged cell below it holds the rotated "To be filled out by
-// applicant" label - there is no separate second column.
-const NUM_COL_W = CONTENT_WIDTH * (22.4 / 504.8)
-const CONTENT_COL_W = CONTENT_WIDTH - NUM_COL_W
-const HALF_W = CONTENT_COL_W / 2
-
-// Section 1's 5 data columns: Date | GWF Part No. | Part Description | Affected Batchlot Number | Batchlot Quantity
-const S1_DATE_W = CONTENT_COL_W * (40 / 482.4)
-const S1_PARTNO_W = CONTENT_COL_W * (94.7 / 482.4)
-const S1_PARTDESC_W = CONTENT_COL_W * (191.3 / 482.4)
-const S1_BATCHNO_W = CONTENT_COL_W * (78 / 482.4)
-const S1_BATCHQTY_W = CONTENT_COL_W * (78 / 482.4)
-
-// Adjacent cells each draw their own border, so a shared edge between two
-// stacked/side-by-side cells renders at roughly 2x BORDER (both strokes sit
-// next to each other). The table's outer frame must stay clearly heavier than
-// that doubled-up worst case, or every line in the PDF reads as the same
-// weight - hence the widening gap between BORDER and the table border below.
-const BORDER = 0.5
-const FONT_SIZE = 8
-
-// The source table separates sections 7/8 and 8/9 with a blank, unbordered
-// gap (measured off the DOCX render at ~8.3pt) instead of a shared border -
-// every other section boundary sits flush with no gap at all.
-const SECTION_GAP = 8.3
-
-const today = new Date()
-const todayStr = `${String(today.getDate()).padStart(2, '0')}.${String(
-  today.getMonth() + 1,
-).padStart(2, '0')}.${today.getFullYear()}`
-
-const styles = StyleSheet.create({
-  page: {
-    paddingTop: PAGE_PADDING,
-    paddingBottom: PAGE_PADDING,
-    paddingHorizontal: PAGE_PADDING,
-    fontFamily: 'Helvetica',
-    fontSize: FONT_SIZE,
-    color: '#000000',
-    flexDirection: 'column',
-  },
-  footerPinned: {
-    position: 'absolute',
-    bottom: PAGE_PADDING,
-    left: PAGE_PADDING,
-    right: PAGE_PADDING,
-  },
-  headerWrap: {
-    position: 'relative',
-  },
-  headerFileName: {
-    fontSize: 7,
-  },
-  headerLogo: {
-    position: 'absolute',
-    top: -19,
-    right: 0,
-    width: 72,
-    height: 35.5,
-    objectFit: 'contain',
-  },
-  headerRule: {
-    borderBottomWidth: 0.75,
-    borderBottomColor: '#000000',
-    marginTop: 6,
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 15,
-    marginTop: 14,
-    marginBottom: 6,
-  },
-  titleSub: {
-    fontSize: 11,
-  },
-  footerRule: {
-    borderTopWidth: 0.5,
-    borderTopColor: '#000000',
-    marginBottom: 3,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    fontSize: 7,
-  },
-  footerRow2: {
-    fontSize: 7,
-    marginTop: 2,
-  },
-  table: {
-    borderWidth: 1.5,
-    borderColor: '#000000',
-  },
-  sectionRow: {
-    flexDirection: 'row',
-  },
-  numCell: {
-    width: NUM_COL_W,
-    borderWidth: BORDER,
-    borderColor: '#000000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 2,
-  },
-  numCellTop: {
-    justifyContent: 'flex-start',
-    paddingTop: 5,
-  },
-  labelCell: {
-    borderWidth: BORDER,
-    borderColor: '#000000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  contentCol: {
-    flexDirection: 'column',
-  },
-  cell: {
-    borderWidth: BORDER,
-    borderColor: '#000000',
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-  },
-  bold: {
-    fontFamily: 'Helvetica-Bold',
-  },
-  small: {
-    fontSize: 6.5,
-  },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checkboxSquare: {
-    width: 7,
-    height: 7,
-    borderWidth: BORDER,
-    borderColor: '#000000',
-    marginRight: 4,
-  },
-  // The table's own outer border already draws the right edge of the form.
-  // Any content cell that reaches that same edge must not also draw its own
-  // right border - two independent borders sitting on (almost) the same
-  // coordinate render as a faint doubled line once rasterized. Applied to
-  // every cell that is the last (rightmost) column in its row.
-  flush: {
-    borderRightWidth: 0,
-  },
-  footnote: {
-    fontSize: 6,
-  },
-})
-
-function SectionNum({ n }) {
+// Repeats on every page: file name / document title, logo, rule.
+function Header({ title, logoSrc }) {
   return (
-    <View style={[styles.numCell, styles.numCellTop]}>
-      <Text>{n}</Text>
+    <View fixed style={abs(0, 0, { width: PAGE_W, height: 50 })}>
+      <Text maxLines={1} style={abs(49.56, HEADER_TEXT_TOP - HEADER_DY, { width: 420 })}>
+        {clean(title).replace(/\n/g, ' ') || DEFAULT_HEADER_TITLE}
+      </Text>
+      <Image src={logoSrc} style={abs(LOGO.left, LOGO.top, { width: LOGO.width, height: LOGO.height })} />
+      <View style={abs(RULE_LEFT, HEADER_RULE_Y, { width: RULE_W, height: W_THIN, backgroundColor: BLACK })} />
     </View>
   )
 }
 
-// Matches the source table exactly: the number occupies the left column only
-// for the height of the header row; a second, vertically-merged cell below it
-// (spanning the rest of the section's rows) holds the rotated label.
-function NumberAndLabel({ n, headerHeight, labelHeight, label = 'To be filled out by applicant' }) {
+// Repeats on every page: "Seite x / y" comes from the render prop.
+function Footer({ generatedAt }) {
   return (
-    <View style={{ width: NUM_COL_W }}>
-      <View style={[styles.numCell, { width: NUM_COL_W, height: headerHeight }]}>
-        <Text>{n}</Text>
-      </View>
-      <View style={[styles.labelCell, { width: NUM_COL_W, height: labelHeight }]}>
-        <Text
-          style={{
-            fontSize: 7,
-            fontStyle: 'italic',
-            transform: 'rotate(-90deg)',
-            width: labelHeight - 8,
-            textAlign: 'center',
-          }}
-        >
-          {label}
-        </Text>
-      </View>
-    </View>
-  )
-}
-
-function Checkbox({ label, style, labelStyle }) {
-  return (
-    <View style={[styles.checkboxRow, style]}>
-      <View style={styles.checkboxSquare} />
-      <Text style={labelStyle}>{label}</Text>
-    </View>
-  )
-}
-
-function DottedLine({ style }) {
-  return (
-    <Text style={[{ fontSize: FONT_SIZE }, style]}>
-      {'.'.repeat(60)}
-    </Text>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Header / Footer
-// ---------------------------------------------------------------------------
-function FormHeader({ logoSrc, withTitle = true }) {
-  return (
-    <View fixed>
-      <View style={styles.headerWrap}>
-        <Text style={styles.headerFileName}>DL05-F0987 - Quality Notification.docx</Text>
-        {/* eslint-disable-next-line jsx-a11y/alt-text */}
-        <Image style={styles.headerLogo} src={logoSrc} />
-      </View>
-      <View style={styles.headerRule} />
-      {withTitle ? (
-        <Text style={styles.title}>
-          Quality Notification | <Text style={styles.titleSub}>(intern &amp; extern)</Text>
-        </Text>
-      ) : null}
-    </View>
-  )
-}
-
-function FormFooter({ page }) {
-  return (
-    <View style={styles.footerPinned}>
-      <View style={styles.footerRule} />
-      <View style={styles.footerRow}>
-        <Text>Owner: QM / Freigabe: 16.10.2020</Text>
-        <Text>Seite {page} / 2</Text>
-        <Text>Quelle: GWFWorX</Text>
-      </View>
-      <Text style={styles.footerRow2}>
-        Verteiler: GWF / Unkontrollierte Ausgabe: {todayStr}
+    <View fixed style={abs(0, FOOTER_RULE_Y - 1, { width: PAGE_W, height: 60 })}>
+      <View style={abs(RULE_LEFT, 1, { width: RULE_W, height: W_THIN, backgroundColor: BLACK })} />
+      <Text style={abs(49.56, 791.41 - FOOTER_RULE_Y + 1 - FOOTER_DY)}>Owner: QM  / Freigabe: 16.10.2020</Text>
+      <Text
+        style={abs(258.41, 791.41 - FOOTER_RULE_Y + 1 - FOOTER_DY)}
+        render={({ pageNumber, totalPages }) => `Seite ${pageNumber} / ${totalPages}`}
+      />
+      <Text style={abs(437.02, 791.41 - FOOTER_RULE_Y + 1 - FOOTER_DY)}>Quelle: GWFWorX</Text>
+      <Text style={abs(49.56, 804.37 - FOOTER_RULE_Y + 1 - FOOTER_DY)}>
+        Verteiler: GWF / Unkontrollierte Ausgabe: {generatedAt}
       </Text>
     </View>
   )
 }
 
-// ---------------------------------------------------------------------------
-// Section 1
-// ---------------------------------------------------------------------------
-const S1_HEADER_H = 24
-const S1_ROW_HEIGHTS = [20, 16, 16, 20, 16, 20] // empty date row, QNNo, Applicant/Dept header, value, Supplier label, value
-const S1_LABEL_H = S1_ROW_HEIGHTS.reduce((a, b) => a + b, 0)
-
-function Section1() {
+// Title on page 1 only; the table starts at the template's y=89.66.
+function Title() {
   return (
-    <View style={styles.sectionRow}>
-      <NumberAndLabel n={1} headerHeight={S1_HEADER_H} labelHeight={S1_LABEL_H} />
-      <View style={styles.contentCol}>
-        <View style={{ flexDirection: 'row' }}>
-          <View style={[styles.cell, styles.bold, { width: S1_DATE_W, height: S1_HEADER_H }]}>
-            <Text>Date</Text>
-          </View>
-          <View style={[styles.cell, styles.bold, { width: S1_PARTNO_W, height: S1_HEADER_H }]}>
-            <Text>GWF Part No.</Text>
-          </View>
-          <View style={[styles.cell, styles.bold, { width: S1_PARTDESC_W, height: S1_HEADER_H }]}>
-            <Text>Part Description</Text>
-          </View>
-          <View style={[styles.cell, styles.bold, { width: S1_BATCHNO_W, height: S1_HEADER_H }]}>
-            <Text>Affected Batchlot Number</Text>
-          </View>
-          <View style={[styles.cell, styles.bold, styles.flush, { width: S1_BATCHQTY_W, height: S1_HEADER_H }]}>
-            <Text>Batchlot Quantity</Text>
-          </View>
+    <View style={{ height: PAGE1_TABLE_TOP - PAGE_TOP, paddingTop: 0.52 }}>
+      <Text style={{ fontSize: 16, marginLeft: 49.56 - RULE_LEFT }}>
+        Quality Notification | <Text style={{ fontSize: 12 }}>(intern & extern)</Text>
+      </Text>
+    </View>
+  )
+}
+
+const table = { width: TABLE_W, marginLeft: TABLE_LEFT - RULE_LEFT }
+
+export default function QualityNotificationPdf({
+  data = emptyData,
+  logoSrc = '/gwf-logo.png',
+  generatedAt = formatDate(),
+}) {
+  const d = { ...emptyData, ...data }
+  return (
+    <Document title={clean(d.docTitle) || 'DL05-F0987 - Quality Notification'} author="GWF" creator="GWF Quality Notification">
+      <Page
+        size={[PAGE_W, PAGE_H]}
+        style={{
+          fontFamily: FONT_FAMILY,
+          fontSize: FONT_SIZE,
+          lineHeight: LINE_HEIGHT,
+          color: BLACK,
+          paddingTop: PAGE_TOP,
+          paddingBottom: PAGE_H - CONTENT_BOTTOM,
+          paddingLeft: RULE_LEFT,
+          paddingRight: PAGE_W - RULE_RIGHT,
+        }}
+      >
+        <Header title={d.docTitle} logoSrc={logoSrc} />
+        <Footer generatedAt={generatedAt} />
+        <Title />
+        <View style={table}>
+          <Section1 data={d} />
+          <Section2 data={d} />
+          <Section3 data={d} />
+          <Section4 data={d} />
+          <Section5 data={d} />
         </View>
-        <View style={{ flexDirection: 'row' }}>
-          <View style={[styles.cell, { width: S1_DATE_W, height: S1_ROW_HEIGHTS[0] }]} />
-          <View style={[styles.cell, { width: S1_PARTNO_W, height: S1_ROW_HEIGHTS[0] }]} />
-          <View style={[styles.cell, { width: S1_PARTDESC_W, height: S1_ROW_HEIGHTS[0] }]} />
-          <View style={[styles.cell, { width: S1_BATCHNO_W, height: S1_ROW_HEIGHTS[0] }]} />
-          <View style={[styles.cell, styles.flush, { width: S1_BATCHQTY_W, height: S1_ROW_HEIGHTS[0] }]} />
+        <View style={table}>
+          <Section6 data={d} />
+          <Section7 data={d} />
         </View>
-        <View style={{ flexDirection: 'row' }}>
-          <View style={[styles.cell, styles.bold, { width: HALF_W, height: S1_ROW_HEIGHTS[1] }]}>
-            <Text>
-              Quality Notification No.{' '}
-              <Text style={{ fontFamily: 'Helvetica' }}>(to be allocated by GWF QM)</Text>
+        {/* 8, 9, 10 and their footnotes stay together on one page. */}
+        <View wrap={false} style={[table, { marginTop: 4.68 }]}>
+          <Section8 />
+          <View style={{ marginLeft: 54.6 - TABLE_LEFT, paddingTop: 0.4 }}>
+            <Text style={{ fontSize: 6, lineHeight: 1.14, fontStyle: 'italic' }}>
+              * Release only valid with signature of the Management Board + Quality Management
+            </Text>
+            <Text style={{ fontSize: 6, lineHeight: 1.14, fontStyle: 'italic' }}>
+              **  In case the sales department is required to be informed
             </Text>
           </View>
-          <View style={[styles.cell, styles.flush, { width: HALF_W, height: S1_ROW_HEIGHTS[1] }]} />
-        </View>
-        <View style={{ flexDirection: 'row' }}>
-          <View style={[styles.cell, styles.bold, { width: HALF_W, height: S1_ROW_HEIGHTS[2] }]}>
-            <Text>Applicant</Text>
+          <View style={{ marginTop: 2.15 }}>
+            <Section9_10 />
           </View>
-          <View style={[styles.cell, styles.bold, styles.flush, { width: HALF_W, height: S1_ROW_HEIGHTS[2] }]}>
-            <Text>Department</Text>
-          </View>
-        </View>
-        <View style={{ flexDirection: 'row' }}>
-          <View style={[styles.cell, { width: HALF_W, height: S1_ROW_HEIGHTS[3] }]} />
-          <View style={[styles.cell, styles.flush, { width: HALF_W, height: S1_ROW_HEIGHTS[3] }]} />
-        </View>
-        <View style={{ flexDirection: 'row' }}>
-          <View style={[styles.cell, styles.bold, styles.flush, { width: CONTENT_COL_W, height: S1_ROW_HEIGHTS[4] }]}>
-            <Text>
-              Supplier + Supplier number{' '}
-              <Text style={{ fontFamily: 'Helvetica' }}>(if applicable)</Text>
-            </Text>
-          </View>
-        </View>
-        <View style={{ flexDirection: 'row' }}>
-          <View style={[styles.cell, styles.flush, { width: CONTENT_COL_W, height: S1_ROW_HEIGHTS[5] }]} />
-        </View>
-      </View>
-    </View>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Section 2 - Problem Description
-// ---------------------------------------------------------------------------
-const S2_HEADER_H = 16
-const S2_BOX_H = 90
-const S2_PICTURES_H = 30
-
-function Section2() {
-  return (
-    <View style={styles.sectionRow}>
-      <NumberAndLabel n={2} headerHeight={S2_HEADER_H} labelHeight={S2_BOX_H + S2_PICTURES_H} />
-      <View style={styles.contentCol}>
-        <View style={[styles.cell, styles.bold, styles.flush, { width: CONTENT_COL_W, height: S2_HEADER_H }]}>
-          <Text>Problem Description</Text>
-        </View>
-        <View style={[styles.cell, styles.flush, { width: CONTENT_COL_W, height: S2_BOX_H }]} />
-        <View style={[styles.cell, styles.flush, { width: CONTENT_COL_W, height: S2_PICTURES_H }]}>
-          <Text>Attached Pictures:</Text>
-        </View>
-      </View>
-    </View>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Section 3 - Root Cause
-// ---------------------------------------------------------------------------
-const S3_HEADER_H = 16
-const S3_BOX_H = 130
-
-function Section3() {
-  return (
-    <View style={styles.sectionRow}>
-      <NumberAndLabel n={3} headerHeight={S3_HEADER_H} labelHeight={S3_BOX_H} />
-      <View style={styles.contentCol}>
-        <View style={[styles.cell, styles.bold, styles.flush, { width: CONTENT_COL_W, height: S3_HEADER_H }]}>
-          <Text>Root Cause</Text>
-        </View>
-        <View style={[styles.cell, styles.flush, { width: CONTENT_COL_W, height: S3_BOX_H }]} />
-      </View>
-    </View>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Section 4 - Disposition (parts)
-// ---------------------------------------------------------------------------
-function Section4() {
-  const half = HALF_W
-  return (
-    <View style={styles.sectionRow}>
-      <SectionNum n={4} />
-      <View style={styles.contentCol}>
-        <View style={[styles.cell, styles.flush, { width: CONTENT_COL_W }]}>
-          <Text style={styles.bold}>Disposition (parts)</Text>
-        </View>
-        <View style={[styles.cell, styles.flush, { width: CONTENT_COL_W, flexDirection: 'row', minHeight: 100 }]}>
-          <View style={{ width: half }}>
-            <Checkbox label="Scrap" />
-            <Checkbox label="Sorting (under Concession)" style={{ marginTop: 6 }} />
-          </View>
-          <View style={{ width: half }}>
-            <Checkbox label="Rework" />
-            <Checkbox label="Use as is" style={{ marginTop: 6 }} />
-            <Checkbox label="Risk assessment (mandatory)" style={{ marginTop: 4, paddingLeft: 14 }} />
-            <Checkbox label="Other supporting documents" style={{ marginTop: 3, paddingLeft: 14 }} />
-            <DottedLine style={{ marginTop: 3, paddingLeft: 14, width: half }} />
-          </View>
-        </View>
-      </View>
-    </View>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Section 5 - Disposition (process)
-// ---------------------------------------------------------------------------
-function Section5() {
-  const half = HALF_W
-  return (
-    <View style={styles.sectionRow}>
-      <SectionNum n={5} />
-      <View style={styles.contentCol}>
-        <View style={[styles.cell, styles.flush, { width: CONTENT_COL_W }]}>
-          <Text style={styles.bold}>Disposition (process)</Text>
-        </View>
-        <View style={[styles.cell, styles.flush, { width: CONTENT_COL_W, flexDirection: 'row', minHeight: 90 }]}>
-          <View style={{ width: half }}>
-            <Checkbox label="Stop until fixed" />
-          </View>
-          <View style={{ width: half }}>
-            <Checkbox label="Continue with Concession" />
-            <Checkbox label="Risk assessment (mandatory)" style={{ marginTop: 4, paddingLeft: 14 }} />
-            <Checkbox label="Other supporting documents" style={{ marginTop: 3, paddingLeft: 14 }} />
-            <DottedLine style={{ marginTop: 3, paddingLeft: 14, width: half }} />
-          </View>
-        </View>
-        <View style={[styles.cell, styles.flush, { width: CONTENT_COL_W }]}>
-          <Text style={styles.bold}>If concession:</Text>
-        </View>
-        <View style={{ flexDirection: 'row' }}>
-          <View style={[styles.cell, styles.bold, { width: half, height: 16 }]}>
-            <Text>Until (date)</Text>
-          </View>
-          <View style={[styles.cell, styles.bold, styles.flush, { width: half, height: 16 }]}>
-            <Text>Quantity (number)</Text>
-          </View>
-        </View>
-        <View style={{ flexDirection: 'row' }}>
-          <View style={[styles.cell, { width: half, height: 18 }]} />
-          <View style={[styles.cell, styles.flush, { width: half, height: 18 }]} />
-        </View>
-      </View>
-    </View>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Section 6 - Corrective Actions (page 2)
-// ---------------------------------------------------------------------------
-function Section6() {
-  return (
-    <View style={styles.sectionRow}>
-      <SectionNum n={6} />
-      <View style={styles.contentCol}>
-        <View style={[styles.cell, styles.flush, { width: CONTENT_COL_W }]}>
-          <Text style={styles.bold}>Corrective Actions</Text>
-        </View>
-        <View style={[styles.cell, styles.flush, { width: CONTENT_COL_W }]}>
-          <View style={{ flexDirection: 'row' }}>
-            <Checkbox label="Tool repair" style={{ width: HALF_W, marginTop: 2 }} />
-            <View style={{ width: HALF_W }} />
-          </View>
-          <View style={{ flexDirection: 'row' }}>
-            <View style={{ width: HALF_W }} />
-            <View style={{ width: HALF_W }}>
-              <Checkbox label="DFM" style={{ marginTop: 10 }} />
-              <Checkbox label="FAI" style={{ marginTop: 6 }} />
-              <Checkbox label="Capability Study (PpK)" style={{ marginTop: 6 }} />
-              <Checkbox label="all critical dimensions" style={{ marginTop: 6, paddingLeft: 28 }} />
-              <Checkbox label="selected dimensions" style={{ marginTop: 6, paddingLeft: 28 }} />
-              <DottedLine style={{ marginTop: 16, width: HALF_W }} />
-              <Checkbox label="Sample submission" style={{ marginTop: 10 }} />
-            </View>
-          </View>
-          <Checkbox label="other" style={{ marginTop: 16 }} />
-          <Checkbox label="New PSW" style={{ marginTop: 10 }} />
-          <View style={{ height: 8 }} />
-        </View>
-      </View>
-    </View>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Section 7 - Information to sales / customer
-// ---------------------------------------------------------------------------
-function InfoRow({ label, caption }) {
-  return (
-    <View style={[styles.cell, styles.flush, { flexDirection: 'row', width: CONTENT_COL_W, padding: 0 }]}>
-      <View style={{ flex: 1, paddingHorizontal: 4, paddingVertical: 2 }}>
-        <Text style={styles.bold}>{label}</Text>
-        <Text style={styles.small}>{caption}</Text>
-      </View>
-      <View style={{ width: 150, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 }}>
-        <Checkbox label="ja / yes" style={{ marginRight: 14 }} />
-        <Checkbox label="nein / no" />
-      </View>
-    </View>
-  )
-}
-
-function Section7() {
-  return (
-    <View style={styles.sectionRow}>
-      <SectionNum n={7} />
-      <View style={styles.contentCol}>
-        <InfoRow label="Information to the sales department:" caption="For information only" />
-        <InfoRow label="Information to the customer:" caption="Sales communicates towards customer" />
-      </View>
-    </View>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Section 8 - Signatures table
-// ---------------------------------------------------------------------------
-const SIG_COLS = [
-  { key: 'rowlabel', label: '' },
-  { key: 'e', label: 'E (R + D)', italic: false },
-  { key: 'scm', label: 'SCM', italic: false },
-  { key: 'p', label: 'P (Production)', italic: true },
-  { key: 'gf', label: '*GF (Management Board)', italic: true },
-  { key: 'qm', label: '*QM (Quality Management)', italic: true },
-  { key: 'sales', label: '**Sales', italic: false },
-]
-
-function Section8() {
-  const fixedW = CONTENT_COL_W * (63 / 482.4) // ratio taken from the source table's row-label column
-  const otherW = (CONTENT_COL_W - fixedW) / (SIG_COLS.length - 1)
-
-  return (
-    <View style={styles.sectionRow}>
-      <SectionNum n={8} />
-      <View style={styles.contentCol}>
-        <View style={{ flexDirection: 'row' }}>
-          {SIG_COLS.map((c, i) => (
-            <View
-              key={c.key}
-              style={[
-                styles.cell,
-                i === SIG_COLS.length - 1 ? styles.flush : null,
-                { width: i === 0 ? fixedW : otherW, height: 34, justifyContent: 'center' },
-              ]}
-            >
-              {c.label ? (
-                <Text
-                  style={{
-                    fontFamily: c.italic ? 'Helvetica-BoldOblique' : 'Helvetica-Bold',
-                    textAlign: 'center',
-                    fontSize: 7,
-                  }}
-                >
-                  {c.label}
-                </Text>
-              ) : null}
-            </View>
-          ))}
-        </View>
-        <View style={{ flexDirection: 'row' }}>
-          {SIG_COLS.map((c, i) => (
-            <View
-              key={c.key}
-              style={[
-                styles.cell,
-                i === SIG_COLS.length - 1 ? styles.flush : null,
-                { width: i === 0 ? fixedW : otherW, height: 20 },
-              ]}
-            >
-              {i === 0 ? <Text style={styles.bold}>Signature</Text> : null}
-            </View>
-          ))}
-        </View>
-        <View style={{ flexDirection: 'row' }}>
-          {SIG_COLS.map((c, i) => (
-            <View
-              key={c.key}
-              style={[
-                styles.cell,
-                i === SIG_COLS.length - 1 ? styles.flush : null,
-                { width: i === 0 ? fixedW : otherW, height: 20 },
-              ]}
-            >
-              {i === 0 ? <Text style={styles.bold}>Date</Text> : null}
-            </View>
-          ))}
-        </View>
-      </View>
-    </View>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Section 9 - Customer approval
-// ---------------------------------------------------------------------------
-function Section9() {
-  const w1 = CONTENT_COL_W * 0.455
-  const w2 = CONTENT_COL_W * 0.279
-  const w3 = CONTENT_COL_W * 0.266
-  return (
-    <View style={styles.sectionRow}>
-      <SectionNum n={9} />
-      <View style={{ flexDirection: 'row' }}>
-        <View style={[styles.cell, styles.bold, { width: w1, height: 34 }]}>
-          <Text>
-            Customer approval <Text style={{ fontFamily: 'Helvetica' }}>(if applicable)</Text>
+          <Text style={{ fontSize: 6, lineHeight: 1.14, marginLeft: 54.6 - TABLE_LEFT, marginTop: 2.34 }}>
+            Ablage GWF: G\Publik\Q-Dokumente\Quality Notification
           </Text>
         </View>
-        <View style={[styles.cell, styles.bold, { width: w2, height: 34 }]}>
-          <Text>Name</Text>
-        </View>
-        <View style={[styles.cell, styles.bold, styles.flush, { width: w3, height: 34 }]}>
-          <Text>Signature</Text>
-        </View>
-      </View>
-    </View>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Section 10 - Check Execution/Completion
-// ---------------------------------------------------------------------------
-function Section10() {
-  const w1 = CONTENT_COL_W * 0.455
-  const w2 = CONTENT_COL_W * 0.279
-  const w3 = CONTENT_COL_W * 0.266
-  return (
-    <View style={styles.sectionRow}>
-      <SectionNum n={10} />
-      <View style={{ flexDirection: 'row' }}>
-        <View style={[styles.cell, styles.bold, { width: w1, height: 34 }]}>
-          <Text>Check Execution/Completion</Text>
-        </View>
-        <View style={[styles.cell, styles.bold, { width: w2, height: 34 }]}>
-          <Text>Signature</Text>
-        </View>
-        <View
-          style={[
-            styles.cell,
-            styles.flush,
-            { width: w3, height: 34, flexDirection: 'row', alignItems: 'center' },
-          ]}
-        >
-          <Text style={styles.bold}>Status completed</Text>
-          <View style={{ flexGrow: 1 }} />
-          <Text>ja / yes{'  '}</Text>
-          <View style={styles.checkboxSquare} />
-        </View>
-      </View>
-    </View>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Document
-// ---------------------------------------------------------------------------
-export default function QualityNotificationPdf({ logoSrc = '/gwf-logo.png' }) {
-  return (
-    <Document title="DL05-F0987 - Quality Notification">
-      <Page size="A4" style={styles.page}>
-        <FormHeader logoSrc={logoSrc} />
-        <View style={styles.table}>
-          <Section1 />
-          <Section2 />
-          <Section3 />
-          <Section4 />
-          <Section5 />
-        </View>
-        <FormFooter page={1} />
-      </Page>
-      <Page size="A4" style={styles.page}>
-        <FormHeader logoSrc={logoSrc} withTitle={false} />
-        {/* Sections 6/7 and 9/10 each share one continuous table border (they
-            sit flush with no gap), but the source table draws a genuinely
-            empty, unbordered gap before section 8 and before section 9 - so
-            each group gets its own bordered table, and the gap is plain
-            margin between them, not a border-wrapped blank row. */}
-        <View style={[styles.table, { marginTop: 16 }]}>
-          <Section6 />
-          <Section7 />
-        </View>
-        <View style={[styles.table, { marginTop: SECTION_GAP }]}>
-          <Section8 />
-        </View>
-        {/* Source doc: these two lines sit as plain body text below section
-            8's table - no border, flush with the table's own left edge. */}
-        <Text style={[styles.footnote, { fontStyle: 'italic', marginTop: 3 }]}>
-          * Release only valid with signature of the Management Board + Quality Management
-        </Text>
-        <Text style={[styles.footnote, { fontStyle: 'italic' }]}>
-          ** In case the sales department is required to be informed
-        </Text>
-        <View style={[styles.table, { marginTop: SECTION_GAP }]}>
-          <Section9 />
-          <Section10 />
-        </View>
-        <Text style={{ fontSize: 7, marginTop: 4 }}>
-          Ablage GWF: G\Publik\Q-Dokumente\Quality Notification
-        </Text>
-        <FormFooter page={2} />
       </Page>
     </Document>
   )
