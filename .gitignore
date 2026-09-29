@@ -5,3 +5,4 @@ dist
 scripts/.generate-pdf.bundle.mjs
 quality-notification-empty.pdf
 .work/
+data

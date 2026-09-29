@@ -4,46 +4,85 @@ import { emptyData, formatDate, pdfFileName } from '../pdf/data.js'
 import { AutoTextarea, Block, Check, TextField, Field, YesNoField } from './fields.jsx'
 import ImagePicker from './ImagePicker.jsx'
 import PdfPreview, { renderPdfBlob } from './PdfPreview.jsx'
+import { api } from '../api.js'
 
 const STORE = 'qn-form-v1'
 
 const fresh = () => ({ ...structuredClone(emptyData), date: formatDate() })
 
+// Fills gaps in saved data so older records keep working when fields are added.
+function normalize(saved, keepImages) {
+  const base = fresh()
+  return {
+    ...base,
+    ...saved,
+    parts: { ...base.parts, ...saved.parts },
+    process: { ...base.process, ...saved.process },
+    corrective: { ...base.corrective, ...saved.corrective },
+    images: keepImages && Array.isArray(saved.images) ? saved.images : [],
+  }
+}
+
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE) || 'null')
-    if (saved && typeof saved === 'object') {
-      const base = fresh()
-      return {
-        ...base,
-        ...saved,
-        parts: { ...base.parts, ...saved.parts },
-        process: { ...base.process, ...saved.process },
-        corrective: { ...base.corrective, ...saved.corrective },
-        images: [],
-      }
-    }
+    if (saved && typeof saved === 'object') return normalize(saved, false)
   } catch {
     /* ignore corrupt or unavailable storage */
   }
   return fresh()
 }
 
-export default function FormPage({ onBack }) {
+// Fields required to complete a notification (must match server/index.js).
+const REQUIRED = { date: 'date', partNo: 'partNo', partDesc: 'partDesc', applicant: 'applicant', department: 'department', problem: 's2' }
+
+export default function FormPage({ id, onBack, onDone }) {
   const { t } = useI18n()
-  const [data, setData] = useState(load)
+  // recordId: the saved notification being edited (null = new, not yet saved).
+  const [recordId, setRecordId] = useState(id ?? null)
+  const [status, setStatus] = useState(null) // 'draft' | 'completed' once known
+  const [data, setData] = useState(() => (id ? fresh() : load()))
+  const [loading, setLoading] = useState(Boolean(id))
+  const [loadError, setLoadError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [notice, setNotice] = useState(null) // { kind: 'ok' | 'error', text }
   const [showPreview, setShowPreview] = useState(false) // mobile only
 
-  // Autosave text fields (images are excluded on purpose: too large).
+  // Open an existing notification from the database.
   useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    api
+      .get(id)
+      .then((row) => {
+        if (cancelled) return
+        setData(normalize(row.data, true))
+        setStatus(row.status)
+        setLoading(false)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setLoadError(t('loadError'))
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  // Unsaved new forms are kept in localStorage so a page reload loses nothing
+  // (images excluded on purpose: too large). Saved records live in the database.
+  useEffect(() => {
+    if (recordId || loading) return
     try {
       const { images, ...rest } = data // eslint-disable-line no-unused-vars
       localStorage.setItem(STORE, JSON.stringify(rest))
     } catch {
       /* quota / private mode */
     }
-  }, [data])
+  }, [data, recordId, loading])
 
   const set = (key) => (value) => setData((d) => ({ ...d, [key]: value }))
   const setIn = (group, key) => (value) => setData((d) => ({ ...d, [group]: { ...d[group], [key]: value } }))
@@ -78,8 +117,56 @@ export default function FormPage({ onBack }) {
     setData(fresh())
   }
 
+  // Saves as draft or completed. Completing validates the required fields.
+  async function save(target) {
+    setNotice(null)
+    if (target === 'completed') {
+      const missing = Object.keys(REQUIRED).filter((k) => !String(data[k] ?? '').trim())
+      if (missing.length) {
+        setNotice({ kind: 'error', text: `${t('missingFields')} ${missing.map((k) => t(REQUIRED[k])).join(', ')}` })
+        return
+      }
+    }
+    setSaving(true)
+    try {
+      const row = recordId ? await api.update(recordId, target, data) : await api.create(target, data)
+      try {
+        localStorage.removeItem(STORE)
+      } catch {
+        /* ignore */
+      }
+      if (target === 'completed') {
+        onDone('completed')
+        return
+      }
+      setStatus('draft')
+      if (!recordId) {
+        setRecordId(row.id)
+        // keep the URL in sync without triggering a reload of the record
+        history.replaceState(null, '', `#/form/${row.id}`)
+      }
+      setNotice({ kind: 'ok', text: t('draftSaved') })
+    } catch (e) {
+      setNotice({ kind: 'error', text: e.status === 422 ? t('missingFields') : t('saveError') })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // The preview only re-renders when the debounced value changes.
   const previewData = useMemo(() => data, [data])
+
+  if (loading) return <p className="note" style={{ padding: 24 }}>{t('loading')}</p>
+  if (loadError) {
+    return (
+      <p className="error" style={{ padding: 24 }}>
+        {loadError}{' '}
+        <button type="button" className="btn" onClick={onBack}>
+          {t('back')}
+        </button>
+      </p>
+    )
+  }
 
   return (
     <div className={`form-page ${showPreview ? 'show-preview' : ''}`}>
@@ -88,7 +175,7 @@ export default function FormPage({ onBack }) {
           <button type="button" className="btn ghost" onClick={onBack}>
             ← {t('back')}
           </button>
-          <h1>{t('formTitle')}</h1>
+          <h1>{recordId ? `${t('formTitle')} #${recordId}` : t('formTitle')}</h1>
         </div>
 
         <TextField label={t('docTitle')} hint={t('docTitleHint')} value={data.docTitle} onChange={set('docTitle')} />
@@ -174,13 +261,24 @@ export default function FormPage({ onBack }) {
           <YesNoField label={t('infoCustomer')} value={data.infoCustomer} onChange={set('infoCustomer')} yes={t('yes')} no={t('no')} />
         </Block>
 
+        {notice && <p className={notice.kind === 'ok' ? 'note ok' : 'error'}>{notice.text}</p>}
         <div className="actions">
-          <button type="button" className="btn primary" onClick={generate} disabled={busy}>
+          {status !== 'completed' && (
+            <button type="button" className="btn" onClick={() => save('draft')} disabled={saving}>
+              {t('saveDraft')}
+            </button>
+          )}
+          <button type="button" className="btn primary" onClick={() => save('completed')} disabled={saving}>
+            {status === 'completed' ? t('saveChanges') : t('complete')}
+          </button>
+          <button type="button" className="btn" onClick={generate} disabled={busy}>
             {busy ? t('generating') : t('generate')}
           </button>
-          <button type="button" className="btn" onClick={reset}>
-            {t('reset')}
-          </button>
+          {!recordId && (
+            <button type="button" className="btn" onClick={reset}>
+              {t('reset')}
+            </button>
+          )}
         </div>
       </div>
 
