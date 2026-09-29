@@ -1,41 +1,41 @@
 # GWF Quality Notifications
 
-Wewnętrzna aplikacja do cyfryzacji formularza `DL05-F0987 - Quality Notification`.
+Internal application for digitizing the `DL05-F0987 - Quality Notification` form.
 
-**Etap 1 (obecny zakres):** wierny 1:1 layout pustego formularza jako komponent
-React + eksport do PDF (bez wypełniania danych, logowania, workflow podpisów
-czy bazy danych — to kolejne etapy).
+**Stage 1 (current scope):** a faithful 1:1 layout of the empty form as a
+React component + PDF export (without data entry, login, signature workflow
+or a database — those are later stages).
 
 ## Stack
 
 - React + Vite
-- `@react-pdf/renderer` — PDF budowany bezpośrednio z komponentów JSX (nie
+- `@react-pdf/renderer` — PDF built directly from JSX components (not
   html2canvas/screenshot)
 
-## Struktura
+## Structure
 
-- `src/components/QualityNotificationForm.jsx` — podgląd formularza na ekranie (HTML/CSS)
-- `src/pdf/QualityNotificationPdf.jsx` — layout do generowania PDF-a
-- `src/App.jsx` — podgląd + przycisk „Pobierz pusty formularz PDF”
-- `public/gwf-logo.png` — **placeholder** logo GWF (podmienić na docelowy plik)
-- `docs/` — oryginalne pliki referencyjne (PDF/DOCX)
+- `src/components/QualityNotificationForm.jsx` — on-screen form preview (HTML/CSS)
+- `src/pdf/QualityNotificationPdf.jsx` — layout for PDF generation
+- `src/App.jsx` — preview + "Download empty PDF form" button
+- `public/gwf-logo.png` — **placeholder** GWF logo (replace with the final file)
+- `docs/` — original reference files (PDF/DOCX)
 
-## Uruchomienie
+## Running
 
 ```bash
 npm install
-npm run dev      # podgląd na http://localhost:5173
-npm run build    # build produkcyjny do dist/
+npm run dev      # preview at http://localhost:5173
+npm run build    # production build into dist/
 ```
 
-### Uwaga: firmowy proxy/TLS (Zscaler itp.)
+### Note: corporate proxy/TLS (Zscaler etc.)
 
-Jeśli `npm install` kończy się błędem
-`UNABLE_TO_GET_ISSUER_CERT_LOCALLY`, to dlatego, że Node.js nie widzi
-firmowego certyfikatu root CA, który jest już zaufany przez Windows
-(git/przeglądarka działają, bo korzystają z magazynu certyfikatów Windows;
-Node ma własny, osobny magazyn). Rozwiązanie — wyeksportować zaufane
-certyfikaty Windows do pliku PEM i wskazać go Node'owi:
+If `npm install` fails with
+`UNABLE_TO_GET_ISSUER_CERT_LOCALLY`, it's because Node.js can't see the
+corporate root CA certificate that Windows already trusts
+(git/browsers work fine because they use the Windows certificate store;
+Node has its own, separate store). Solution — export the trusted Windows
+certificates to a PEM file and point Node to it:
 
 ```powershell
 $outFile = "$env:TEMP\corp-ca-bundle.pem"
@@ -49,10 +49,10 @@ Get-ChildItem Cert:\LocalMachine\Root, Cert:\LocalMachine\CA, Cert:\CurrentUser\
 $env:NODE_EXTRA_CA_CERTS = $outFile
 ```
 
-Ustaw `NODE_EXTRA_CA_CERTS` na stałe (np. w profilu PowerShell albo zmiennych
-środowiskowych użytkownika), żeby nie robić tego przy każdej nowej sesji.
+Set `NODE_EXTRA_CA_CERTS` permanently (e.g. in your PowerShell profile or
+user environment variables) so you don't have to do this every new session.
 
-## Generowanie PDF-a bez przeglądarki (do testów)
+## Generating the PDF without a browser (for testing)
 
 ```bash
 node -e "
@@ -67,5 +67,5 @@ esbuild.buildSync({
 node scripts/.generate-pdf.bundle.mjs
 ```
 
-Powstaje `quality-notification-empty.pdf` w katalogu głównym repo (plik ten
-nie jest commitowany — to tylko narzędzie do szybkiej weryfikacji layoutu).
+This produces `quality-notification-empty.pdf` in the repo root (this file
+is not committed — it's just a tool for quickly verifying the layout).
