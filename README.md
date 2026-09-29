@@ -31,6 +31,7 @@ or a database — those are later stages).
 npm install
 npm run dev      # preview at http://localhost:5173
 npm run build    # production build into dist/
+npm run dev:full # API (:3001) + Vite with /api proxy in one command (Ctrl+C stops both)
 ```
 
 ### Note: corporate proxy/TLS (Zscaler etc.)

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test:pdf": "node tools/render.mjs empty",
     "dev:server": "node --watch server/index.js",
-    "start:server": "node server/index.js"
+    "start:server": "node server/index.js",
+    "dev:full": "concurrently -k -n api,web -c blue,green \"npm:dev:server\" \"npm:dev\""
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.1.6",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^10.0.5",
     "puppeteer-core": "^25.12.0",
     "vite": "^6.0.7"
   }
