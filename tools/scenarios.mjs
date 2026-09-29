@@ -78,6 +78,17 @@ export const scenarios = {
     corrective: { ...emptyish().corrective, details: words150 },
     images: [img(1, 1200, 700), img(2, 900, 900)],
   }),
+  // multi-line texts next to "other supporting documents" / "selected dimensions" / "other"
+  notes: async () => ({
+    ...full,
+    parts: { ...full.parts, otherDocsText: 'Prüfbericht 2026-0815\nMessprotokoll Los 4711\nFoto-Doku ' + LONG_WORD.slice(0, 40) },
+    process: { ...full.process, otherDocsText: 'Freigabe QM vom 28.09.2026\nFreigabe Kunde' },
+    corrective: {
+      ...full.corrective,
+      cpkText: 'Merkmale 3, 5, 7 und 9\nzusätzlich Merkmal 12\nund 14',
+      otherText: 'Sonderprüfung durch Kunde\nmit Bericht bis KW 42\nund Rückmeldung',
+    },
+  }),
   only6: async () => ({ ...emptyish(), corrective: { ...emptyish().corrective, details: words150 } }),
   only4: async () => ({ ...emptyish(), parts: { ...emptyish().parts, details: words150 } }),
 }

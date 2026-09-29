@@ -294,17 +294,17 @@ export default function FormPage({ id, onBack, onDone }) {
         <Block n={1} title={t('s1')}>
           <div className="grid g5">
             <TextField label={t('date')} value={data.date} onChange={set('date')} placeholder="DD.MM.YYYY" />
-            <TextField label={t('partNo')} value={data.partNo} onChange={set('partNo')} />
-            <TextField label={t('partDesc')} value={data.partDesc} onChange={set('partDesc')} />
-            <TextField label={t('batchNo')} value={data.batchNo} onChange={set('batchNo')} />
-            <TextField label={t('batchQty')} value={data.batchQty} onChange={set('batchQty')} />
+            <TextField multiline label={t('partNo')} value={data.partNo} onChange={set('partNo')} />
+            <TextField multiline label={t('partDesc')} value={data.partDesc} onChange={set('partDesc')} />
+            <TextField multiline label={t('batchNo')} value={data.batchNo} onChange={set('batchNo')} />
+            <TextField multiline label={t('batchQty')} value={data.batchQty} onChange={set('batchQty')} />
           </div>
-          <TextField label={t('qnNo')} value={data.qnNo} onChange={set('qnNo')} />
+          <TextField multiline label={t('qnNo')} value={data.qnNo} onChange={set('qnNo')} />
           <div className="grid g2">
-            <TextField label={t('applicant')} value={data.applicant} onChange={set('applicant')} />
-            <TextField label={t('department')} value={data.department} onChange={set('department')} />
+            <TextField multiline label={t('applicant')} value={data.applicant} onChange={set('applicant')} />
+            <TextField multiline label={t('department')} value={data.department} onChange={set('department')} />
           </div>
-          <TextField label={t('supplier')} value={data.supplier} onChange={set('supplier')} />
+          <TextField multiline label={t('supplier')} value={data.supplier} onChange={set('supplier')} />
         </Block>
 
         <Block n={2} title={t('s2')}>
@@ -323,9 +323,17 @@ export default function FormPage({ id, onBack, onDone }) {
             <Check label={t('sorting')} checked={p.sorting} onChange={setIn('parts', 'sorting')} />
             <Check label={t('useAsIs')} checked={p.useAsIs} onChange={setIn('parts', 'useAsIs')} />
             <Check indent={1} label={t('risk')} checked={p.risk} onChange={setIn('parts', 'risk')} />
-            <Check indent={1} label={t('otherDocs')} checked={p.otherDocs} onChange={setIn('parts', 'otherDocs')} />
+            <Check
+              indent={1}
+              label={t('otherDocs')}
+              checked={p.otherDocs}
+              onChange={setIn('parts', 'otherDocs')}
+              text={p.otherDocsText}
+              onText={setIn('parts', 'otherDocsText')}
+              placeholder={t('specify')}
+              below
+            />
           </div>
-          <TextField label={t('otherDocsText')} maxLength={60} value={p.otherDocsText} onChange={setIn('parts', 'otherDocsText')} />
           <Field label={t('details')}>
             <AutoTextarea value={p.details} onChange={setIn('parts', 'details')} minRows={3} />
           </Field>
@@ -336,9 +344,17 @@ export default function FormPage({ id, onBack, onDone }) {
             <Check label={t('stop')} checked={pr.stop} onChange={setIn('process', 'stop')} />
             <Check label={t('concession')} checked={pr.concession} onChange={setIn('process', 'concession')} />
             <Check indent={1} label={t('risk')} checked={pr.risk} onChange={setIn('process', 'risk')} />
-            <Check indent={1} label={t('otherDocs')} checked={pr.otherDocs} onChange={setIn('process', 'otherDocs')} />
+            <Check
+              indent={1}
+              label={t('otherDocs')}
+              checked={pr.otherDocs}
+              onChange={setIn('process', 'otherDocs')}
+              text={pr.otherDocsText}
+              onText={setIn('process', 'otherDocsText')}
+              placeholder={t('specify')}
+              below
+            />
           </div>
-          <TextField label={t('otherDocsText')} maxLength={60} value={pr.otherDocsText} onChange={setIn('process', 'otherDocsText')} />
           <Field label={t('details')}>
             <AutoTextarea value={pr.details} onChange={setIn('process', 'details')} minRows={3} />
           </Field>
@@ -356,15 +372,28 @@ export default function FormPage({ id, onBack, onDone }) {
             <Check label={t('fai')} checked={c.fai} onChange={setIn('corrective', 'fai')} />
             <Check label={t('cpk')} checked={c.cpk} onChange={setIn('corrective', 'cpk')} />
             <Check indent={1} label={t('cpkAll')} checked={c.cpkAll} onChange={setIn('corrective', 'cpkAll')} />
-            <Check indent={1} label={t('cpkSelected')} checked={c.cpkSelected} onChange={setIn('corrective', 'cpkSelected')} />
+            <Check
+              indent={1}
+              label={t('cpkSelected')}
+              checked={c.cpkSelected}
+              onChange={setIn('corrective', 'cpkSelected')}
+              text={c.cpkText}
+              onText={setIn('corrective', 'cpkText')}
+              placeholder={t('specify')}
+              below
+            />
             <Check label={t('sample')} checked={c.sample} onChange={setIn('corrective', 'sample')} />
-            <Check label={t('other')} checked={c.other} onChange={setIn('corrective', 'other')} />
+            <Check
+              label={t('other')}
+              checked={c.other}
+              onChange={setIn('corrective', 'other')}
+              text={c.otherText ?? ''}
+              onText={setIn('corrective', 'otherText')}
+              placeholder={t('specify')}
+              below
+            />
             <Check label={t('psw')} checked={c.psw} onChange={setIn('corrective', 'psw')} />
           </div>
-          <TextField label={t('cpkSelected') + ' (…)'} maxLength={60} value={c.cpkText} onChange={setIn('corrective', 'cpkText')} />
-          <Field label={t('details')}>
-            <AutoTextarea value={c.details} onChange={setIn('corrective', 'details')} minRows={3} />
-          </Field>
         </Block>
 
         <Block n={7} title={t('s7')}>

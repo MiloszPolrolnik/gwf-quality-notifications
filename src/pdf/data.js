@@ -49,6 +49,7 @@ export const emptyData = {
     cpkText: '',
     sample: false,
     other: false,
+    otherText: '',
     psw: false,
     details: '',
   },

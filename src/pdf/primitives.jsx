@@ -225,6 +225,18 @@ export function DottedLine({ left, top, text }) {
   )
 }
 
+// Dotted line whose text may run over several lines: it flows in the region (so
+// the things below move down) with the first line on the dots. `top` is the top
+// of the dotted line's 8pt line box, like DottedLine.
+export function DottedNote({ left, top, text, minHeight = 0 }) {
+  return (
+    <View style={{ marginTop: top - 2.4, minHeight }}>
+      <DottedLine left={left} top={2.4} />
+      {text ? <Text style={{ marginLeft: left + 1 }}>{clean(text)}</Text> : null}
+    </View>
+  )
+}
+
 // One text label at an absolute position; `base` is the desired baseline
 // relative to the region top.
 export function At({ left, base, size = FONT_SIZE, children, style }) {

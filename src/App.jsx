@@ -41,11 +41,6 @@ function Shell() {
           <img src={`${BASE}gwf-logo.png`} alt="GWF" />
           <span>{t('appTitle')}</span>
         </a>
-        <nav className="topnav">
-          <a href="#/form">{t('newNotification')}</a>
-          <a href="#/drafts">{t('drafts')}</a>
-          <a href="#/history">{t('history')}</a>
-        </nav>
         <LanguageSwitch />
       </header>
       {route.name === 'form' && (

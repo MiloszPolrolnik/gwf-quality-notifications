@@ -22,20 +22,39 @@ export function Field({ label, hint, children, className = '' }) {
   )
 }
 
-export function TextField({ label, value, onChange, hint, className, ...rest }) {
+// `multiline`: starts as one line like an input, grows downwards and accepts Enter.
+export function TextField({ label, value, onChange, hint, className, multiline = false, ...rest }) {
   return (
     <Field label={label} hint={hint} className={className}>
-      <input type="text" value={value} onChange={(e) => onChange(e.target.value)} {...rest} />
+      {multiline ? (
+        <AutoTextarea value={value} onChange={onChange} minRows={1} {...rest} />
+      ) : (
+        <input type="text" value={value} onChange={(e) => onChange(e.target.value)} {...rest} />
+      )}
     </Field>
   )
 }
 
-export function Check({ label, checked, onChange, indent = 0 }) {
-  return (
-    <label className="check" style={{ marginLeft: indent * 22 }}>
+// `text` / `onText`: adds an input next to the label (or a growing textarea under it with
+// `below`) while the box is checked.
+export function Check({ label, checked, onChange, indent = 0, text, onText, placeholder, below = false }) {
+  const box = (
+    <label className="check" style={onText ? undefined : { marginLeft: indent * 22 }}>
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <span>{label}</span>
     </label>
+  )
+  if (!onText) return box
+  return (
+    <div className={below ? 'check-text below' : 'check-text'} style={{ marginLeft: indent * 22 }}>
+      {box}
+      {checked &&
+        (below ? (
+          <AutoTextarea minRows={1} value={text} placeholder={placeholder} onChange={onText} />
+        ) : (
+          <input type="text" maxLength={60} value={text} placeholder={placeholder} onChange={(e) => onText(e.target.value)} />
+        ))}
+    </div>
   )
 }
 
