@@ -1,7 +1,7 @@
 import React from 'react'
 import { View, Text } from '@react-pdf/renderer'
 import { Cell, Row, SectionHead, SectionBody, CheckItem, DottedLine, bold, clean } from '../primitives.jsx'
-import { S5, W_THICK } from '../geometry.js'
+import { S5, W_THICK, W_LINE } from '../geometry.js'
 
 // "Until" / "Quantity" split at x=315.07 (not at the half of the column)
 const UNTIL_W = 315.07 - 77.42
@@ -13,6 +13,8 @@ export default function Section5({ data }) {
   const d = data.process
   return (
     <>
+      {/* header + checkbox block stay together; details flow on their own */}
+      <View wrap={false}>
       <SectionHead n={5} h={S5.head} presence={REGION_H + 20}>
         <Row top="none" style={{ flexGrow: 1 }}>
           <Cell grow style={bold}>
@@ -21,7 +23,7 @@ export default function Section5({ data }) {
         </Row>
       </SectionHead>
       <SectionBody>
-        <Row h={S5.body}>
+        <Row h={REGION_H + W_LINE} wrap={false}>
           <Cell grow style={{ paddingTop: 0 }}>
             <View wrap={false} style={{ height: REGION_H }}>
               <CheckItem checked={d.stop} label="Stop until fixed" left={0} top={1.25} dx={11.04} />
@@ -30,7 +32,14 @@ export default function Section5({ data }) {
               <CheckItem checked={d.otherDocs} label="Other supporting documents" left={266.93} top={32.33} dx={11.4} />
               <DottedLine left={280.25} top={46.85} text={d.otherDocsText} />
             </View>
-            {d.details ? <Text style={{ paddingBottom: 3 }}>{clean(d.details)}</Text> : null}
+          </Cell>
+        </Row>
+      </SectionBody>
+      </View>
+      <SectionBody continued>
+        <Row top="none" h={S5.body - REGION_H - W_LINE}>
+          <Cell grow style={{ paddingTop: 2, paddingBottom: 2 }}>
+            <Text>{clean(d.details)}</Text>
           </Cell>
         </Row>
         <View wrap={false}>

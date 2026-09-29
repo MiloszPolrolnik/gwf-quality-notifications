@@ -47,6 +47,17 @@ const img = (n, w, h) => ({
   height: h,
 })
 
+const words150 =
+  Array.from({ length: 9 }, (_, i) =>
+    `Satz ${i + 1}: Bei der Wareneingangsprüfung wurden Abweichungen an der Außenkontur festgestellt, die Ursache liegt im Werkzeugverschleiß der Stanze und in der Überschreitung der Toleranz ±0,05 mm.`,
+  ).join(' ') + ' https://example.com/qualitaet/meldung/QN26-043/anhang/pruefbericht-2026-0815-rev-c-final-version-with-a-very-long-unbroken-address';
+
+const emptyish = () => ({
+  parts: { scrap: true, rework: false, sorting: false, useAsIs: true, risk: true, otherDocs: false, otherDocsText: '', details: '' },
+  process: { stop: false, concession: true, risk: false, otherDocs: false, otherDocsText: '', details: '', until: '', quantity: '' },
+  corrective: { toolRepair: true, dfm: false, fai: false, cpk: false, cpkAll: false, cpkSelected: false, cpkText: '', sample: false, other: true, psw: true, details: '' },
+})
+
 export const scenarios = {
   empty: async () => ({}),
   full: async () => full,
@@ -57,4 +68,16 @@ export const scenarios = {
     rootCause: para(3, 'Ursache'),
     images: [img(1, 1200, 700), img(2, 900, 900), img(3, 1400, 500), img(4, 800, 1000), img(5, 1000, 600), img(6, 1100, 800)],
   }),
+  // bug-regression scenarios: ~150 words incl. an unbroken URL
+  allLong: async () => ({
+    ...emptyish(),
+    problem: words150,
+    rootCause: words150,
+    parts: { ...emptyish().parts, details: words150 },
+    process: { ...emptyish().process, details: words150 },
+    corrective: { ...emptyish().corrective, details: words150 },
+    images: [img(1, 1200, 700), img(2, 900, 900)],
+  }),
+  only6: async () => ({ ...emptyish(), corrective: { ...emptyish().corrective, details: words150 } }),
+  only4: async () => ({ ...emptyish(), parts: { ...emptyish().parts, details: words150 } }),
 }

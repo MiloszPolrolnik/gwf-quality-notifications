@@ -8,6 +8,7 @@ export const emptyData = {
   date: '',
   partNo: '',
   partDesc: '',
+  qnNo: '',
   batchNo: '',
   batchQty: '',
   applicant: '',

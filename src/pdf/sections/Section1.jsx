@@ -36,7 +36,9 @@ export default function Section1({ data }) {
               Quality Notification No. <Text style={{ fontWeight: 'normal' }}>(to be allocated by GWF QM)</Text>
             </Text>
           </Cell>
-          <Cell grow />
+          <Cell grow>
+            <Val>{data.qnNo}</Val>
+          </Cell>
         </Row>
         <Row h={S1_ROWS.apHead}>
           <Cell w={HALF_W} style={bold}>

@@ -112,7 +112,7 @@ export function NumCell({ n, dx = 0, dy = 0 }) {
 // Rotated "To be filled out by applicant". It is a `render` node so react-pdf
 // evaluates it once per page fragment: when a section breaks across pages the
 // label is repeated in every fragment, centred in that fragment's height.
-export function LabelCell({ label = false }) {
+export function LabelCell({ label = false, continued = false }) {
   return (
     <View
       style={{
@@ -121,7 +121,7 @@ export function LabelCell({ label = false }) {
         paddingRight: 0.24,
         borderLeftWidth: W_THIN,
         borderLeftColor: LIGHT,
-        borderTopWidth: W_THIN,
+        borderTopWidth: continued ? 0 : W_THIN,
         borderTopColor: LIGHT,
         alignItems: 'center',
         justifyContent: 'flex-end',
@@ -167,10 +167,10 @@ export function SectionHead({ n, h, top = 'thick', numDx = 0, numDy = 0, presenc
 }
 
 // Body of a section: [label cell | content column].
-export function SectionBody({ label, children, wrap = true, style }) {
+export function SectionBody({ label, continued, children, wrap = true, style }) {
   return (
     <View style={[{ flexDirection: 'row' }, style]} wrap={wrap}>
-      <LabelCell label={label} />
+      <LabelCell label={label} continued={continued} />
       <ContentCol>{children}</ContentCol>
     </View>
   )

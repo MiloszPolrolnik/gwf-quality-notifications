@@ -94,21 +94,19 @@ export default function FormPage({ onBack }) {
         <TextField label={t('docTitle')} hint={t('docTitleHint')} value={data.docTitle} onChange={set('docTitle')} />
 
         <Block n={1} title={t('s1')}>
-          <div className="grid g3">
+          <div className="grid g5">
             <TextField label={t('date')} value={data.date} onChange={set('date')} placeholder="DD.MM.YYYY" />
             <TextField label={t('partNo')} value={data.partNo} onChange={set('partNo')} />
-            <TextField label={t('batchNo')} value={data.batchNo} onChange={set('batchNo')} />
-          </div>
-          <div className="grid g2">
             <TextField label={t('partDesc')} value={data.partDesc} onChange={set('partDesc')} />
+            <TextField label={t('batchNo')} value={data.batchNo} onChange={set('batchNo')} />
             <TextField label={t('batchQty')} value={data.batchQty} onChange={set('batchQty')} />
           </div>
+          <TextField label={t('qnNo')} value={data.qnNo} onChange={set('qnNo')} />
           <div className="grid g2">
             <TextField label={t('applicant')} value={data.applicant} onChange={set('applicant')} />
             <TextField label={t('department')} value={data.department} onChange={set('department')} />
           </div>
           <TextField label={t('supplier')} value={data.supplier} onChange={set('supplier')} />
-          <p className="note">{t('qnNote')}</p>
         </Block>
 
         <Block n={2} title={t('s2')}>
