@@ -89,6 +89,23 @@ export const scenarios = {
       otherText: 'Sonderprüfung durch Kunde\nmit Bericht bis KW 42\nund Rückmeldung',
     },
   }),
+  // texts that fit on one page but not in the space left after the previous section
+  mid: async () => ({ ...full, problem: para(14, 'Problem'), rootCause: para(20, 'Ursache') }),
+  // bold / italic / underline and inline images in the free texts
+  rich: async () => {
+    const B = '\uE001', I = '\uE002', U = '\uE003'
+    const tok = (id) => `\uE004${id}\uE005`
+    const fieldImages = { a: img(1, 1200, 700), b: img(2, 900, 900) }
+    return {
+      ...full,
+      partNo: `${B}12.110008${B}`,
+      fieldImages,
+      problem: `${B}Wichtig:${B} dies ist ${I}kursiv${I}, ${U}unterstrichen${U} und ${B}${I}${U}alles zusammen${U}${I}${B}.\n${para(3, 'Problem')}\n${tok('a')}\nText nach dem Bild.\n\n${tok('b')}\n${para(2, 'Ende')}`,
+      rootCause: `${B}Ursache${B}\n` + para(2, 'U'),
+      parts: { ...full.parts, details: `${U}Details${U}\n${tok('a')}` },
+      images: [img(3, 1000, 600), img(4, 800, 1000)],
+    }
+  },
   only6: async () => ({ ...emptyish(), corrective: { ...emptyish().corrective, details: words150 } }),
   only4: async () => ({ ...emptyish(), parts: { ...emptyish().parts, details: words150 } }),
 }

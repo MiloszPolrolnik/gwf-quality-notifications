@@ -1,20 +1,37 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n.jsx'
 import { emptyData, formatDate, pdfFileName } from '../pdf/data.js'
-import { AutoTextarea, Block, Check, TextField, Field, YesNoField } from './fields.jsx'
+import { Block, Check, TextField, RichField, YesNoField } from './fields.jsx'
+import RichEditor, { ImageStore } from './RichEditor.jsx'
 import ImagePicker from './ImagePicker.jsx'
 import PdfPreview, { renderPdfBlob } from './PdfPreview.jsx'
 import { api } from '../api.js'
+import { dropImages, imageIds, plainText } from '../richText.js'
 
 const STORE = 'qn-form-v1'
 const AUTOSAVE_DELAY = 2000
 
 const fresh = () => ({ ...structuredClone(emptyData), date: formatDate() })
 
+// Applies fn to every string of the form data except the image maps.
+function mapStrings(value, fn) {
+  if (typeof value === 'string') return fn(value)
+  if (Array.isArray(value)) return value.map((v) => mapStrings(v, fn))
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, k === 'images' || k === 'fieldImages' ? v : mapStrings(v, fn)]))
+  }
+  return value
+}
+
+function usedImageIds(value, ids = new Set()) {
+  mapStrings(value, (s) => (imageIds(s).forEach((id) => ids.add(id)), s))
+  return ids
+}
+
 // Fills gaps in saved data so older records keep working when fields are added.
 function normalize(saved, keepImages) {
   const base = fresh()
-  return {
+  const merged = {
     ...base,
     ...saved,
     parts: { ...base.parts, ...saved.parts },
@@ -22,6 +39,12 @@ function normalize(saved, keepImages) {
     corrective: { ...base.corrective, ...saved.corrective },
     images: keepImages && Array.isArray(saved.images) ? saved.images : [],
   }
+  // Inline images: keep only those still used in a text; texts lose tokens of missing images.
+  const stored = keepImages && saved.fieldImages && typeof saved.fieldImages === 'object' ? saved.fieldImages : {}
+  const used = usedImageIds(merged)
+  const fieldImages = Object.fromEntries(Object.entries(stored).filter(([id]) => used.has(id)))
+  const keep = new Set(Object.keys(fieldImages))
+  return { ...mapStrings(merged, (s) => dropImages(s, keep)), images: merged.images, fieldImages }
 }
 
 function load() {
@@ -141,13 +164,13 @@ export default function FormPage({ id, onBack, onDone }) {
     const onPageHide = () => {
       if (!isDirty() || statusRef.current === 'completed') return
       // keepalive requests are capped at ~64 KB: images are left out (the server keeps stored ones).
-      const { images, ...rest } = dataRef.current // eslint-disable-line no-unused-vars
+      const { images, fieldImages, ...rest } = dataRef.current // eslint-disable-line no-unused-vars
       const json = JSON.stringify(rest)
       if (json === beaconRef.current) return
       beaconRef.current = json
       const rid = idRef.current
-      if (rid) api.updateKeepalive(rid, { ...rest, images: [] })
-      else api.createKeepalive({ ...rest, images: [] })
+      if (rid) api.updateKeepalive(rid, { ...rest, images: [], fieldImages: {} })
+      else api.createKeepalive({ ...rest, images: [], fieldImages: {} })
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     window.addEventListener('pagehide', onPageHide)
@@ -188,7 +211,7 @@ export default function FormPage({ id, onBack, onDone }) {
   useEffect(() => {
     if (recordId || loading) return
     try {
-      const { images, ...rest } = data // eslint-disable-line no-unused-vars
+      const { images, fieldImages, ...rest } = data // eslint-disable-line no-unused-vars
       localStorage.setItem(STORE, JSON.stringify(rest))
     } catch {
       /* quota / private mode */
@@ -200,6 +223,16 @@ export default function FormPage({ id, onBack, onDone }) {
   const p = data.parts
   const pr = data.process
   const c = data.corrective
+  const imageStore = useMemo(
+    () => ({
+      images: data.fieldImages,
+      add: (img) =>
+        setData((d) => ({ ...d, fieldImages: { ...d.fieldImages, [img.id]: { src: img.src, width: img.width, height: img.height } } })),
+      update: (id, patch) =>
+        setData((d) => (d.fieldImages[id] ? { ...d, fieldImages: { ...d.fieldImages, [id]: { ...d.fieldImages[id], ...patch } } } : d)),
+    }),
+    [data.fieldImages],
+  )
 
   async function generate() {
     setBusy(true)
@@ -232,7 +265,7 @@ export default function FormPage({ id, onBack, onDone }) {
   async function save(target) {
     setNotice(null)
     if (target === 'completed') {
-      const missing = Object.keys(REQUIRED).filter((k) => !String(data[k] ?? '').trim())
+      const missing = Object.keys(REQUIRED).filter((k) => !plainText(data[k]).trim())
       if (missing.length) {
         setNotice({ kind: 'error', text: `${t('missingFields')} ${missing.map((k) => t(REQUIRED[k])).join(', ')}` })
         return
@@ -280,6 +313,7 @@ export default function FormPage({ id, onBack, onDone }) {
   }
 
   return (
+    <ImageStore.Provider value={imageStore}>
     <div className={`form-page ${showPreview ? 'show-preview' : ''}`}>
       <div className="form-col">
         <div className="form-head">
@@ -289,11 +323,11 @@ export default function FormPage({ id, onBack, onDone }) {
           <h1>{recordId ? `${t('formTitle')} #${recordId}` : t('formTitle')}</h1>
         </div>
 
-        <TextField label={t('docTitle')} hint={t('docTitleHint')} value={data.docTitle} onChange={set('docTitle')} />
+        <TextField plain label={t('docTitle')} hint={t('docTitleHint')} value={data.docTitle} onChange={set('docTitle')} />
 
         <Block n={1} title={t('s1')}>
           <div className="grid g5">
-            <TextField label={t('date')} value={data.date} onChange={set('date')} placeholder="DD.MM.YYYY" />
+            <TextField plain label={t('date')} value={data.date} onChange={set('date')} placeholder="DD.MM.YYYY" />
             <TextField multiline label={t('partNo')} value={data.partNo} onChange={set('partNo')} />
             <TextField multiline label={t('partDesc')} value={data.partDesc} onChange={set('partDesc')} />
             <TextField multiline label={t('batchNo')} value={data.batchNo} onChange={set('batchNo')} />
@@ -308,12 +342,12 @@ export default function FormPage({ id, onBack, onDone }) {
         </Block>
 
         <Block n={2} title={t('s2')}>
-          <AutoTextarea value={data.problem} onChange={set('problem')} minRows={5} />
+          <RichEditor value={data.problem} onChange={set('problem')} minRows={5} allowImages toolbar="always" />
           <ImagePicker images={data.images} onChange={set('images')} />
         </Block>
 
         <Block n={3} title={t('s3')}>
-          <AutoTextarea value={data.rootCause} onChange={set('rootCause')} minRows={5} />
+          <RichEditor value={data.rootCause} onChange={set('rootCause')} minRows={5} allowImages toolbar="always" />
         </Block>
 
         <Block n={4} title={t('s4')}>
@@ -334,9 +368,7 @@ export default function FormPage({ id, onBack, onDone }) {
               below
             />
           </div>
-          <Field label={t('details')}>
-            <AutoTextarea value={p.details} onChange={setIn('parts', 'details')} minRows={3} />
-          </Field>
+          <RichField label={t('details')} value={p.details} onChange={setIn('parts', 'details')} minRows={3} allowImages />
         </Block>
 
         <Block n={5} title={t('s5')}>
@@ -355,9 +387,7 @@ export default function FormPage({ id, onBack, onDone }) {
               below
             />
           </div>
-          <Field label={t('details')}>
-            <AutoTextarea value={pr.details} onChange={setIn('process', 'details')} minRows={3} />
-          </Field>
+          <RichField label={t('details')} value={pr.details} onChange={setIn('process', 'details')} minRows={3} allowImages />
           <div className="field-label">{t('ifConcession')}</div>
           <div className="grid g2">
             <TextField label={t('until')} value={pr.until} onChange={setIn('process', 'until')} />
@@ -435,5 +465,6 @@ export default function FormPage({ id, onBack, onDone }) {
         {showPreview ? t('hidePreview') : t('preview')}
       </button>
     </div>
+    </ImageStore.Provider>
   )
 }

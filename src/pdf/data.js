@@ -1,5 +1,7 @@
 // Shape of the data the PDF document renders. `emptyData` reproduces the blank
-// template; the form UI edits a copy of it.
+// template; the form UI edits a copy of it. Free texts may carry bold / italic /
+// underline marks and inline images (see ../richText.js).
+import { plainText } from '../richText.js'
 
 export const DEFAULT_HEADER_TITLE = 'DL05-F0987 - Quality Notification.docx'
 
@@ -17,6 +19,7 @@ export const emptyData = {
 
   problem: '',
   images: [], // [{ src: dataURL, width, height }]
+  fieldImages: {}, // inline images of the formatted texts: { [id]: { src, width, height } }
   rootCause: '',
 
   parts: {
@@ -68,6 +71,6 @@ export function isoDate(d = new Date()) {
 }
 
 export function pdfFileName(data, d = new Date()) {
-  const part = (data.partNo || '').trim().replace(/[^\p{L}\p{N}._-]+/gu, '_') || 'draft'
+  const part = plainText(data.partNo).trim().replace(/[^\p{L}\p{N}._-]+/gu, '_') || 'draft'
   return `Quality-Notification_${part}_${isoDate(d)}.pdf`
 }

@@ -1,11 +1,11 @@
 import React from 'react'
 import { View, Text } from '@react-pdf/renderer'
-import { Cell, Row, SectionHead, SectionBody, bold, clean } from '../primitives.jsx'
+import { Cell, Row, SectionHead, SectionBody, RichText, bold } from '../primitives.jsx'
 import { S1_COLS, S1_ROWS, HALF_W, INNER_W } from '../geometry.js'
 
 const HEAD = ['Date', 'GWF Part No.', 'Part Description', 'Affected Batchlot Number', 'Batchlot Quantity']
 
-const Val = ({ children }) => <Text>{clean(children)}</Text>
+const Val = ({ children }) => <RichText value={children} />
 
 export default function Section1({ data }) {
   const values = [data.date, data.partNo, data.partDesc, data.batchNo, data.batchQty]

@@ -1,7 +1,8 @@
 import React from 'react'
 import { View, Text } from '@react-pdf/renderer'
-import { Cell, Row, SectionHead, SectionBody, CheckItem, DottedNote, bold, clean } from '../primitives.jsx'
+import { Cell, Row, SectionHead, SectionBody, CheckItem, DottedNote, RichText, bold } from '../primitives.jsx'
 import { S5, W_THICK, W_LINE } from '../geometry.js'
+import { ONE_PAGE, richHeight } from '../measure.js'
 
 // "Until" / "Quantity" split at x=315.07 (not at the half of the column)
 const UNTIL_W = 315.07 - 77.42
@@ -11,6 +12,11 @@ const COL2 = 234.77
 
 export default function Section5({ data }) {
   const d = data.process
+  const text = d.details
+  // Details that fit on one page move as a whole to the next page when they do
+  // not fit here; only longer texts are split. The "If concession" block follows.
+  const whole =
+    Math.max(S5.body - REGION_H - W_LINE, richHeight(text, data.fieldImages) + 4) + S5.concession + S5.untilHead + S5.untilVal <= ONE_PAGE
   return (
     <>
       {/* header + checkbox block stay together; details flow on their own */}
@@ -36,10 +42,10 @@ export default function Section5({ data }) {
         </Row>
       </SectionBody>
       </View>
-      <SectionBody continued>
+      <SectionBody continued wrap={!whole}>
         <Row top="none" h={S5.body - REGION_H - W_LINE}>
           <Cell grow style={{ paddingTop: 2, paddingBottom: 2 }}>
-            <Text>{clean(d.details)}</Text>
+            <RichText value={text} images={data.fieldImages} />
           </Cell>
         </Row>
         <View wrap={false}>
@@ -58,10 +64,10 @@ export default function Section5({ data }) {
           </Row>
           <Row h={S5.untilVal}>
             <Cell w={UNTIL_W}>
-              <Text>{clean(d.until)}</Text>
+              <RichText value={d.until} />
             </Cell>
             <Cell grow>
-              <Text>{clean(d.quantity)}</Text>
+              <RichText value={d.quantity} />
             </Cell>
           </Row>
         </View>

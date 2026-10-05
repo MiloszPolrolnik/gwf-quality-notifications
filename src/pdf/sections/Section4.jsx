@@ -1,7 +1,8 @@
 import React from 'react'
 import { View, Text } from '@react-pdf/renderer'
-import { Cell, Row, SectionHead, SectionBody, CheckItem, DottedNote, bold, clean } from '../primitives.jsx'
+import { Cell, Row, SectionHead, SectionBody, CheckItem, DottedNote, RichText, bold } from '../primitives.jsx'
 import { S4, W_LINE } from '../geometry.js'
+import { ONE_PAGE, richHeight } from '../measure.js'
 
 // Positions are the origin of the template's checkbox glyph relative to the
 // top-left of the box's text area (x from 83.42, y from the box's top line).
@@ -10,6 +11,10 @@ const COL2 = 234.29
 
 export default function Section4({ data }) {
   const d = data.parts
+  const text = d.details
+  // Details that fit on one page move as a whole to the next page when they do
+  // not fit here; only longer texts are split.
+  const whole = Math.max(S4.body - REGION_H - W_LINE, richHeight(text, data.fieldImages) + 4) <= ONE_PAGE
   return (
     <>
       {/* header + checkbox block stay together; details flow on their own */}
@@ -38,10 +43,10 @@ export default function Section4({ data }) {
         </Row>
       </SectionBody>
       </View>
-      <SectionBody continued>
+      <SectionBody continued wrap={!whole}>
         <Row top="none" h={S4.body - REGION_H - W_LINE}>
           <Cell grow style={{ paddingTop: 2, paddingBottom: 2 }}>
-            <Text>{clean(d.details)}</Text>
+            <RichText value={text} images={data.fieldImages} />
           </Cell>
         </Row>
       </SectionBody>

@@ -29,6 +29,7 @@ export default function ImagePicker({ images, onChange }) {
   // Ctrl+V anywhere on the form page pastes clipboard images.
   useEffect(() => {
     function onPaste(e) {
+      if (e.defaultPrevented) return // an editor already inserted the image inline
       const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith('image/'))
       if (files.length) {
         e.preventDefault()

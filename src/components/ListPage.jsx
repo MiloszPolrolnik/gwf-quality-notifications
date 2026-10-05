@@ -37,7 +37,7 @@ export default function ListPage({ status, onOpen, onBack }) {
   }, [load])
 
   async function remove(row) {
-    if (!window.confirm(t('deleteConfirm'))) return
+    if (!window.confirm(isDraft ? t('deleteConfirm') : t('deleteHistoryConfirm'))) return
     try {
       await api.remove(row.id)
       load()
@@ -116,11 +116,9 @@ export default function ListPage({ status, onOpen, onBack }) {
                         {busyId === r.id ? t('generating') : 'PDF'}
                       </button>
                     )}
-                    {isDraft && (
-                      <button type="button" className="btn" onClick={() => remove(r)}>
-                        {t('delete')}
-                      </button>
-                    )}
+                    <button type="button" className="btn" onClick={() => remove(r)}>
+                      {t('delete')}
+                    </button>
                   </td>
                 </tr>
               ))}

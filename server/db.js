@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { plainText } from '../src/richText.js'
 
 // All persistence lives in this file, so a later move to PostgreSQL
 // (as used in AmLogistico) only touches this module.
@@ -33,9 +34,9 @@ db.exec(`
 
 function summary(data) {
   return {
-    part_no: String(data.partNo ?? ''),
-    part_description: String(data.partDesc ?? ''),
-    applicant: String(data.applicant ?? ''),
+    part_no: plainText(data.partNo),
+    part_description: plainText(data.partDesc),
+    applicant: plainText(data.applicant),
   }
 }
 
@@ -104,6 +105,6 @@ export function update(id, { status, data }) {
 }
 
 export function remove(id) {
-  const res = db.prepare("DELETE FROM notifications WHERE id = ? AND status = 'draft'").run(id)
+  const res = db.prepare("DELETE FROM notifications WHERE id = ?").run(id)
   return res.changes > 0
 }

@@ -1,5 +1,6 @@
 import express from 'express'
 import * as db from './db.js'
+import { plainText } from '../src/richText.js'
 
 const app = express()
 app.use(express.json({ limit: '25mb' }))
@@ -25,7 +26,7 @@ function parseBody(body) {
     return { error: 'data must be an object' }
   }
   if (status === 'completed') {
-    const missing = REQUIRED_FOR_COMPLETION.filter((k) => !String(data[k] ?? '').trim())
+    const missing = REQUIRED_FOR_COMPLETION.filter((k) => !plainText(data[k]).trim())
     if (missing.length) return { error: 'missing required fields', missing, code: 422 }
   }
   return { status, data }
@@ -70,19 +71,21 @@ app.put('/api/notifications/:id', (req, res) => {
   if (req.body.keepImages) {
     const current = db.get(id)
     if (current?.status === 'completed') return res.status(409).json({ error: 'completed notifications cannot be autosaved' })
-    if (current) parsed.data.images = current.data?.images ?? []
+    if (current) {
+      parsed.data.images = current.data?.images ?? []
+      parsed.data.fieldImages = current.data?.fieldImages ?? {}
+    }
   }
   const row = db.update(id, parsed)
   if (!row) return res.status(404).json({ error: 'not found' })
   res.json(row)
 })
 
-// Only drafts can be deleted; completed notifications stay in the history.
 app.delete('/api/notifications/:id', (req, res) => {
   const id = parseId(req, res)
   if (id === null) return
   if (!db.remove(id)) {
-    return res.status(404).json({ error: 'draft not found (completed notifications cannot be deleted)' })
+    return res.status(404).json({ error: 'not found' })
   }
   res.status(204).end()
 })

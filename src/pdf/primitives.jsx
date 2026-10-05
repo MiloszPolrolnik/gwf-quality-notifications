@@ -1,5 +1,7 @@
 import React from 'react'
-import { View, Text, Svg, Path, Line } from '@react-pdf/renderer'
+import { View, Text, Svg, Path, Line, Image } from '@react-pdf/renderer'
+import { parseRich, fitInline } from '../richText.js'
+import { INLINE_MAX_W, INLINE_MAX_H } from './measure.js'
 import {
   BLACK,
   GRAY,
@@ -22,6 +24,13 @@ export const TEXT_DY = 0.17
 export const BASE = 7.39
 const LABEL = 'To be filled out by applicant'
 const LABEL_LEN = 99.7 // rendered length of LABEL (8pt italic)
+// Two-line variant for cells that are too short for the single line.
+const LABEL_2 = 'To be filled\nout by applicant'
+const LABEL_2_LEN = 64 // longer of the two lines, incl. letter spacing
+const LABEL_TOP = 5.73 // gap between the cell edge and the label text
+// Space a section header needs below it when its body may break across pages:
+// room for the two-line label.
+export const SPLIT_PRESENCE = 80
 
 export const bold = { fontWeight: 'bold' }
 export const italic = { fontStyle: 'italic' }
@@ -32,6 +41,43 @@ export function clean(str) {
     .replace(/\r\n?/g, '\n')
     .replace(/\t/g, '    ')
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
+}
+
+const runStyle = (r) => ({
+  ...(r.b ? { fontWeight: 'bold' } : null),
+  ...(r.i ? { fontStyle: 'italic' } : null),
+  ...(r.u ? { textDecoration: 'underline' } : null),
+})
+
+// User text with bold / italic / underline runs and inline images (see richText.js).
+// `style` goes to every text block; `images` maps image ids to { src, width, height }.
+export function RichText({ value, images, style }) {
+  const blocks = parseRich(clean(value))
+  if (!blocks.length) return <Text style={style}>{''}</Text>
+  return blocks.map((blk, n) => {
+    if (blk.type === 'text') {
+      return (
+        <Text key={n} style={style}>
+          {blk.runs.map((r, k) =>
+            r.b || r.i || r.u ? (
+              <Text key={k} style={runStyle(r)}>
+                {r.text}
+              </Text>
+            ) : (
+              r.text
+            ),
+          )}
+        </Text>
+      )
+    }
+    const img = images?.[blk.id]
+    if (!img) return null
+    return (
+      <View key={n} wrap={false} style={{ marginTop: 2, marginBottom: 2 }}>
+        <Image src={img.src} style={fitInline(img, INLINE_MAX_W, INLINE_MAX_H)} />
+      </View>
+    )
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -109,10 +155,12 @@ export function NumCell({ n, dx = 0, dy = 0 }) {
   )
 }
 
-// Rotated "To be filled out by applicant". It is a `render` node so react-pdf
-// evaluates it once per page fragment: when a section breaks across pages the
-// label is repeated in every fragment, centred in that fragment's height.
+// Rotated "To be filled out by applicant", exactly once per section.
+//   label="two": two lines anchored to the top of the cell, for bodies that may
+//                break across pages (the label stays in the first fragment).
+//   any other truthy value: one line anchored to the bottom, like the template.
 export function LabelCell({ label = false, continued = false }) {
+  const two = label === 'two'
   return (
     <View
       style={{
@@ -124,11 +172,27 @@ export function LabelCell({ label = false, continued = false }) {
         borderTopWidth: continued ? 0 : W_THIN,
         borderTopColor: LIGHT,
         alignItems: 'center',
-        justifyContent: 'flex-end',
+        justifyContent: two ? 'flex-start' : 'flex-end',
       }}
     >
-      {label ? (
-        <View fixed>
+      {two ? (
+        <Text
+          style={{
+            fontSize: 8,
+            lineHeight: 1,
+            fontStyle: 'italic',
+            transform: 'rotate(-90deg)',
+            width: LABEL_2_LEN,
+            letterSpacing: 0.108,
+            // Rotation is about the box centre: place the box so the rotated
+            // text starts LABEL_TOP below the cell edge.
+            marginTop: LABEL_TOP + LABEL_2_LEN / 2 - 8,
+          }}
+        >
+          {LABEL_2}
+        </Text>
+      ) : label ? (
+        <View>
           <Text
             style={{
               fontSize: 8,
@@ -153,7 +217,7 @@ export function LabelCell({ label = false, continued = false }) {
 
 // Header row of a section: [number | header cells]. Never split, and never left
 // alone at the bottom of a page (`presence` = space that must follow it).
-export function SectionHead({ n, h, top = 'thick', numDx = 0, numDy = 0, presence = 60, children }) {
+export function SectionHead({ n, h, top = 'thick', numDx = 0, numDy = 0, presence = 60, closed = false, children }) {
   return (
     <View
       wrap={false}
@@ -162,6 +226,13 @@ export function SectionHead({ n, h, top = 'thick', numDx = 0, numDy = 0, presenc
     >
       <NumCell n={n} dx={numDx} dy={numDy} />
       <ContentCol>{children}</ContentCol>
+      {/* closing line under the header: it lies exactly on the top lines of the body, so it only shows when the body moved to the next page */}
+      {closed ? (
+        <>
+          <View style={{ position: 'absolute', left: 0.24, bottom: -W_THIN, width: NUM_W - 0.24, height: W_THIN, backgroundColor: LIGHT }} />
+          <View style={{ position: 'absolute', left: NUM_W, bottom: -W_LINE, width: CONTENT_W, height: W_LINE, backgroundColor: GRAY }} />
+        </>
+      ) : null}
     </View>
   )
 }
@@ -232,7 +303,7 @@ export function DottedNote({ left, top, text, minHeight = 0 }) {
   return (
     <View style={{ marginTop: top - 2.4, minHeight }}>
       <DottedLine left={left} top={2.4} />
-      {text ? <Text style={{ marginLeft: left + 1 }}>{clean(text)}</Text> : null}
+      {text ? <RichText value={text} style={{ marginLeft: left + 1 }} /> : null}
     </View>
   )
 }

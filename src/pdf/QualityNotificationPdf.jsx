@@ -121,7 +121,7 @@ export default function QualityNotificationPdf({
           <Section6 data={d} />
           <Section7 data={d} />
         </View>
-        {/* 8, 9, 10 and their footnotes stay together on one page. */}
+        {/* Keep section 8 and its footnotes together, separately from sections 9 and 10. */}
         <View wrap={false} style={[table, { marginTop: 4.68 }]}>
           <Section8 />
           <View style={{ marginLeft: 54.6 - TABLE_LEFT, paddingTop: 0.4 }}>
@@ -132,9 +132,9 @@ export default function QualityNotificationPdf({
               **  In case the sales department is required to be informed
             </Text>
           </View>
-          <View style={{ marginTop: 2.15 }}>
-            <Section9_10 />
-          </View>
+        </View>
+        <View wrap={false} style={[table, { marginTop: 2.15 }]}>
+          <Section9_10 />
           <Text style={{ fontSize: 6, lineHeight: 1.14, marginLeft: 54.6 - TABLE_LEFT, marginTop: 2.34 }}>
             Ablage GWF: G\Publik\Q-Dokumente\Quality Notification
           </Text>

@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useRef } from 'react'
+import RichEditor from './RichEditor.jsx'
 
 // Textarea that grows with its content and keeps pasted line breaks.
 export function AutoTextarea({ value, onChange, minRows = 3, ...rest }) {
@@ -12,25 +13,39 @@ export function AutoTextarea({ value, onChange, minRows = 3, ...rest }) {
   return <textarea ref={ref} rows={minRows} value={value} onChange={(e) => onChange(e.target.value)} {...rest} />
 }
 
-export function Field({ label, hint, children, className = '' }) {
+export function Field({ label, hint, children, className = '', as: Tag = 'label' }) {
   return (
-    <label className={`field ${className}`}>
+    <Tag className={`field ${className}`}>
       <span className="field-label">{label}</span>
       {children}
       {hint ? <span className="field-hint">{hint}</span> : null}
-    </label>
+    </Tag>
   )
 }
 
-// `multiline`: starts as one line like an input, grows downwards and accepts Enter.
-export function TextField({ label, value, onChange, hint, className, multiline = false, ...rest }) {
+// Labelled editor with bold / italic / underline (and inline images with `allowImages`).
+// A <div>, not a <label>: a label would forward clicks to the toolbar buttons.
+export function RichField({ label, value, onChange, minRows = 3, allowImages = false, toolbar = 'always', className }) {
   return (
-    <Field label={label} hint={hint} className={className}>
-      {multiline ? (
-        <AutoTextarea value={value} onChange={onChange} minRows={1} {...rest} />
-      ) : (
+    <Field as="div" label={label} className={className}>
+      <RichEditor value={value} onChange={onChange} minRows={minRows} allowImages={allowImages} toolbar={toolbar} />
+    </Field>
+  )
+}
+
+// `plain`: ordinary input without formatting.
+// `multiline`: starts as one line, grows downwards and accepts Enter.
+export function TextField({ label, value, onChange, hint, className, multiline = false, plain = false, ...rest }) {
+  if (plain) {
+    return (
+      <Field label={label} hint={hint} className={className}>
         <input type="text" value={value} onChange={(e) => onChange(e.target.value)} {...rest} />
-      )}
+      </Field>
+    )
+  }
+  return (
+    <Field as="div" label={label} hint={hint} className={className}>
+      <RichEditor value={value} onChange={onChange} minRows={1} singleLine={!multiline} {...rest} />
     </Field>
   )
 }
@@ -50,7 +65,7 @@ export function Check({ label, checked, onChange, indent = 0, text, onText, plac
       {box}
       {checked &&
         (below ? (
-          <AutoTextarea minRows={1} value={text} placeholder={placeholder} onChange={onText} />
+          <RichEditor minRows={1} value={text} placeholder={placeholder} onChange={onText} />
         ) : (
           <input type="text" maxLength={60} value={text} placeholder={placeholder} onChange={(e) => onText(e.target.value)} />
         ))}
