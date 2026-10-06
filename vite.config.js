@@ -5,6 +5,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     // forward API calls to the Express backend (npm run dev:server)
-    proxy: { '/api': 'http://localhost:3001' },
+    proxy: { '/api': process.env.QN_API || 'http://localhost:3001' },
   },
 })

@@ -73,6 +73,29 @@ function Footer({ generatedAt }) {
   )
 }
 
+// Signatures the reviewers placed on the document, positioned as fractions of the page.
+function SignatureOverlay({ signatures = {} }) {
+  const placed = Object.values(signatures).filter((s) => s.page != null)
+  if (!placed.length) return null
+  return (
+    <View
+      fixed
+      style={abs(0, 0, { width: PAGE_W, height: PAGE_H })}
+      render={({ pageNumber }) =>
+        placed
+          .filter((s) => s.page === pageNumber)
+          .map((s, i) => (
+            <Image
+              key={i}
+              src={s.src}
+              style={abs(s.x * PAGE_W, s.y * PAGE_H, { width: s.w * PAGE_W, height: s.h * PAGE_H, objectFit: 'contain' })}
+            />
+          ))
+      }
+    />
+  )
+}
+
 // Title on page 1 only; the table starts at the template's y=89.66.
 function Title() {
   return (
@@ -109,6 +132,7 @@ export default function QualityNotificationPdf({
       >
         <Header title={d.docTitle} logoSrc={logoSrc} />
         <Footer generatedAt={generatedAt} />
+        <SignatureOverlay signatures={d.signatures} />
         <Title />
         <View style={table}>
           <Section1 data={d} />
@@ -123,7 +147,7 @@ export default function QualityNotificationPdf({
         </View>
         {/* Keep section 8 and its footnotes together, separately from sections 9 and 10. */}
         <View wrap={false} style={[table, { marginTop: 4.68 }]}>
-          <Section8 />
+          <Section8 signatures={d.signatures} />
           <View style={{ marginLeft: 54.6 - TABLE_LEFT, paddingTop: 0.4 }}>
             <Text style={{ fontSize: 6, lineHeight: 1.14, fontStyle: 'italic' }}>
               * Release only valid with signature of the Management Board + Quality Management

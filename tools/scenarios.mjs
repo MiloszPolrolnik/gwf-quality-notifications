@@ -60,6 +60,19 @@ const emptyish = () => ({
 
 export const scenarios = {
   empty: async () => ({}),
+  push: async () => ({ ...full, problem: para(14, 'Problem'), rootCause: para(14, 'Ursache'), parts: { ...full.parts, details: para(2, 'T') } }),
+  // long "other supporting documents" notes in sections 4 / 5 / 6
+  longnote: async () => {
+    const note = Array.from({ length: 70 }, (_, i) => `Zeile ${i + 1} der Notiz`).join(String.fromCharCode(10))
+    return {
+      ...full,
+      problem: para(3, 'Problem'),
+      rootCause: para(2, 'Ursache'),
+      parts: { ...full.parts, otherDocsText: note },
+      process: { ...full.process, otherDocsText: note },
+      corrective: { ...full.corrective, cpkText: note, otherText: note },
+    }
+  },
   full: async () => full,
   long: async () => ({ ...full, problem: para(40, 'Problem'), rootCause: para(25, 'Ursache') }),
   images: async () => ({

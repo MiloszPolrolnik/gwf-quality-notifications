@@ -8,8 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:pdf": "node tools/render.mjs empty",
-    "dev:server": "node --watch server/index.js",
-    "start:server": "node server/index.js",
+    "dev:server": "node --env-file-if-exists=.env --watch server/index.js",
+    "start:server": "node --env-file-if-exists=.env server/index.js",
     "dev:full": "concurrently -k -n api,web -c blue,green \"npm:dev:server\" \"npm:dev\""
   },
   "dependencies": {

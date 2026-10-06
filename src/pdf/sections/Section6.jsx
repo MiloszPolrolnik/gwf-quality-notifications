@@ -1,7 +1,9 @@
 import React from 'react'
 import { View, Text } from '@react-pdf/renderer'
 import { Cell, Row, SectionHead, SectionBody, CheckItem, DottedNote, RichText, bold } from '../primitives.jsx'
+import { Keep } from './Section4.jsx'
 import { S6, W_THIN } from '../geometry.js'
+import { ONE_PAGE, TEXT_W, richHeight } from '../measure.js'
 
 const REGION_H = 178
 const COL2 = 233.57
@@ -11,10 +13,16 @@ const LOWER_Y = 116
 
 export default function Section6({ data }) {
   const d = data.corrective
+  // Normally unbreakable; very long texts let the block break across pages.
+  const breakable =
+    REGION_H +
+      (d.cpkSelected ? richHeight(d.cpkText, {}, TEXT_W - 281) : 0) +
+      (d.other ? richHeight(d.otherText, {}, TEXT_W - 36) : 0) >
+    ONE_PAGE
   return (
-    <>
+    <Keep whole={!breakable} close>
       {/* header + checkbox block stay together; details flow on their own */}
-      <View wrap={false}>
+      <View wrap={breakable}>
       <SectionHead n={6} h={S6.head} top="thin" numDx={3.6} numDy={1} presence={REGION_H + 20}>
         <Row top="none" style={{ flexGrow: 1 }}>
           <Cell grow style={[bold, { paddingTop: 1 }]}>
@@ -23,9 +31,9 @@ export default function Section6({ data }) {
         </Row>
       </SectionHead>
       <SectionBody>
-        <Row h={REGION_H + W_THIN} top="thin" wrap={false}>
+        <Row h={REGION_H + W_THIN} top="thin" wrap={breakable}>
           <Cell grow style={{ paddingTop: 0 }}>
-            <View wrap={false} style={{ minHeight: REGION_H }}>
+            <View wrap={breakable} style={{ minHeight: REGION_H }}>
               <CheckItem checked={d.toolRepair} label="Tool repair" left={0} top={1.15} dx={10.32} />
               <CheckItem checked={d.dfm} label="DFM" left={COL2} top={13.27} dx={10.08} />
               <CheckItem checked={d.fai} label="FAI" left={COL2} top={28.75} dx={10.08} />
@@ -58,6 +66,6 @@ export default function Section6({ data }) {
           </Cell>
         </Row>
       </SectionBody>
-    </>
+    </Keep>
   )
 }

@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, Text } from '@react-pdf/renderer'
+import { View, Text, Image } from '@react-pdf/renderer'
 import { Cell, Row, SectionHead, SectionBody, bold, italic } from '../primitives.jsx'
 import { S8, S8_COLS, W_THICK, PAD_X, BLACK } from '../geometry.js'
 
@@ -17,10 +17,12 @@ const HEAD = [
   [['**Sales', B]],
 ]
 
-const sigCell = { padding: 0 }
+// Signing role -> column of the table (same order as the headers above, after the label column).
+export const SIGN_ROLES = ['E', 'SCM', 'P', 'GF', 'QM', 'SALES']
 
-// Signature block: printed empty, filled in later by the signers.
-export default function Section8() {
+// Signature block: signatures (image) and dates of the reviewers who signed are filled in,
+// the rest stays empty for manual signing. signatures: { [role]: { src, date } }
+export default function Section8({ signatures = {} }) {
   return (
     <View wrap={false}>
       <SectionHead n={8} h={S8.head} numDx={3.6} presence={0}>
@@ -54,6 +56,18 @@ export default function Section8() {
                 style={[{ justifyContent: 'center', paddingTop: 0 }, i === 0 ? bold : null]}
               >
                 {i === 0 ? <Text>{label}</Text> : null}
+                {i > 0 && signatures[SIGN_ROLES[i - 1]] ? (
+                  label === 'Signature' ? (
+                    signatures[SIGN_ROLES[i - 1]].page == null ? (
+                      <Image
+                        src={signatures[SIGN_ROLES[i - 1]].src}
+                        style={{ width: w - 6, height: h - 3, objectFit: 'contain', alignSelf: 'center' }}
+                      />
+                    ) : null
+                  ) : (
+                    <Text style={{ textAlign: 'center' }}>{signatures[SIGN_ROLES[i - 1]].date}</Text>
+                  )
+                ) : null}
               </Cell>
             ))}
           </Row>

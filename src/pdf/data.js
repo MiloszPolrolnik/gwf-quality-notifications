@@ -58,6 +58,8 @@ export const emptyData = {
   },
   infoSales: '', // 'yes' | 'no' | ''
   infoCustomer: '',
+  // Reviewer signatures { [role]: { src, date } }: filled in from the approvals, never stored in the form data.
+  signatures: {},
 }
 
 export function formatDate(d = new Date()) {
@@ -73,4 +75,33 @@ export function isoDate(d = new Date()) {
 export function pdfFileName(data, d = new Date()) {
   const part = plainText(data.partNo).trim().replace(/[^\p{L}\p{N}._-]+/gu, '_') || 'draft'
   return `Quality-Notification_${part}_${isoDate(d)}.pdf`
+}
+
+// Roles a reviewer can sign as = columns of section 8 (see pdf/sections/Section8.jsx).
+export const ROLE_LABELS = {
+  E: 'E (R + D)',
+  SCM: 'SCM',
+  P: 'P (Production)',
+  GF: 'GF (Management Board)',
+  QM: 'QM (Quality Management)',
+  SALES: 'Sales',
+}
+
+
+// Approvals of the API -> the signatures the PDF prints.
+export function signaturesFrom(approvals = []) {
+  const out = {}
+  for (const a of approvals) {
+    if (a.signedAt && a.signature && a.role) out[a.role] = {
+      src: a.signature,
+      date: formatDate(new Date(a.signedAt)),
+      // placement on the page (fractions); null for signatures made before placing existed
+      page: a.sigPage ?? null,
+      x: a.sigX,
+      y: a.sigY,
+      w: a.sigW,
+      h: a.sigH,
+    }
+  }
+  return out
 }

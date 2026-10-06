@@ -1,7 +1,8 @@
 import React from 'react'
 import { View, Text } from '@react-pdf/renderer'
 import { Cell, Row, SectionHead, SectionBody, RichText, bold } from '../primitives.jsx'
-import { S1_COLS, S1_ROWS, HALF_W, INNER_W } from '../geometry.js'
+import { S1_COLS, S1_ROWS, HALF_W, INNER_W, PAD_X } from '../geometry.js'
+import { ONE_PAGE, richHeight } from '../measure.js'
 
 const HEAD = ['Date', 'GWF Part No.', 'Part Description', 'Affected Batchlot Number', 'Batchlot Quantity']
 
@@ -9,8 +10,17 @@ const Val = ({ children }) => <RichText value={children} />
 
 export default function Section1({ data }) {
   const values = [data.date, data.partNo, data.partDesc, data.batchNo, data.batchQty]
+  // Normally unbreakable; very long texts may let the section break across pages.
+  const w = (cell) => cell - 2 * PAD_X - 2
+  const h = (v, cell) => richHeight(v, {}, w(cell))
+  const est =
+    Math.max(...values.map((v, i) => h(v, S1_COLS[i]))) +
+    Math.max(h(data.qnNo, INNER_W - HALF_W), S1_ROWS.qn) +
+    Math.max(h(data.applicant, HALF_W), h(data.department, INNER_W - HALF_W)) +
+    h(data.supplier, INNER_W) +
+    100
   return (
-    <View wrap={false}>
+    <View wrap={est > ONE_PAGE}>
       <SectionHead n={1} h={S1_ROWS.head} top="gray">
         <Row top="none" style={{ flexGrow: 1 }}>
           {HEAD.map((t, i) => (

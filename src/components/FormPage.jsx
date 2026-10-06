@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n.jsx'
-import { emptyData, formatDate, pdfFileName } from '../pdf/data.js'
-import { Block, Check, TextField, RichField, YesNoField } from './fields.jsx'
+import { emptyData, formatDate, pdfFileName, signaturesFrom, ROLE_LABELS } from '../pdf/data.js'
+import { Block, Check, TextField, RichField, YesNoField, ReviewContext, Locked } from './fields.jsx'
 import RichEditor, { ImageStore } from './RichEditor.jsx'
 import ImagePicker from './ImagePicker.jsx'
 import PdfPreview, { renderPdfBlob } from './PdfPreview.jsx'
@@ -10,6 +10,9 @@ import { dropImages, imageIds, plainText } from '../richText.js'
 
 const STORE = 'qn-form-v1'
 const AUTOSAVE_DELAY = 2000
+
+// Statuses in which the form is not autosaved (finished, or frozen for review).
+const NO_AUTOSAVE = ['completed', 'submitted', 'signed']
 
 const fresh = () => ({ ...structuredClone(emptyData), date: formatDate() })
 
@@ -60,11 +63,16 @@ function load() {
 // Fields required to complete a notification (must match server/index.js).
 const REQUIRED = { date: 'date', partNo: 'partNo', partDesc: 'partDesc', applicant: 'applicant', department: 'department', problem: 's2' }
 
-export default function FormPage({ id, onBack, onDone }) {
+export default function FormPage({ id, user, onBack, onDone }) {
   const { t } = useI18n()
   // recordId: the saved notification being edited (null = new, not yet saved).
   const [recordId, setRecordId] = useState(id ?? null)
-  const [status, setStatus] = useState(null) // 'draft' | 'completed' once known
+  const [status, setStatus] = useState(null) // draft | completed | submitted | changes_requested | signed, once known
+  // review workflow data of the loaded record
+  const [meta, setMeta] = useState({ authorId: null, approvals: [], comments: [] })
+  const [picker, setPicker] = useState(null) // null = closed, else { reviewers, picked, busy, error }
+  const [flowBusy, setFlowBusy] = useState(false)
+  const [signing, setSigning] = useState(null) // { src } while the reviewer places the signature
   const [data, setData] = useState(() => (id ? fresh() : load()))
   const [loading, setLoading] = useState(Boolean(id))
   const [loadError, setLoadError] = useState('')
@@ -119,7 +127,7 @@ export default function FormPage({ id, onBack, onDone }) {
 
   // Saves unsaved changes as a draft. Never touches completed records or empty new forms.
   function autosave() {
-    if (loadingRef.current || statusRef.current === 'completed') return Promise.resolve()
+    if (loadingRef.current || NO_AUTOSAVE.includes(statusRef.current)) return Promise.resolve()
     const snapshot = dataRef.current
     const json = JSON.stringify(snapshot)
     if (json === savedRef.current) return Promise.resolve()
@@ -162,7 +170,7 @@ export default function FormPage({ id, onBack, onDone }) {
       e.returnValue = ''
     }
     const onPageHide = () => {
-      if (!isDirty() || statusRef.current === 'completed') return
+      if (!isDirty() || NO_AUTOSAVE.includes(statusRef.current)) return
       // keepalive requests are capped at ~64 KB: images are left out (the server keeps stored ones).
       const { images, fieldImages, ...rest } = dataRef.current // eslint-disable-line no-unused-vars
       const json = JSON.stringify(rest)
@@ -192,7 +200,7 @@ export default function FormPage({ id, onBack, onDone }) {
         savedRef.current = JSON.stringify(loaded)
         statusRef.current = row.status
         setData(loaded)
-        setStatus(row.status)
+        applyRow(row)
         setLoading(false)
       })
       .catch(() => {
@@ -234,10 +242,108 @@ export default function FormPage({ id, onBack, onDone }) {
     [data.fieldImages],
   )
 
+  // Takes over workflow state (status, approvals, notes) of a server response.
+  function applyRow(row) {
+    statusRef.current = row.status
+    setStatus(row.status)
+    setMeta({ authorId: row.authorId ?? null, approvals: row.approvals ?? [], comments: row.comments ?? [] })
+  }
+
+  // Records created before accounts existed have no author: everybody counts as author.
+  const isAuthor = !meta.authorId || meta.authorId === user.id
+  const myApproval = meta.approvals.find((a) => a.userId === user.id)
+  const frozen = status === 'submitted' || status === 'signed'
+  const readOnly = frozen || !isAuthor
+  const underReview = status === 'submitted' || status === 'changes_requested'
+  const canNote = Boolean(recordId && myApproval && underReview)
+  const openNotes = meta.comments.filter((c) => !c.resolved).length
+
+  const review = useMemo(
+    () => ({
+      readOnly,
+      userId: user.id,
+      notes: meta.comments,
+      onAdd: canNote ? async (fieldKey, text) => applyRow(await api.addNote(recordId, fieldKey, text)) : null,
+      onDelete: canNote ? async (noteId) => applyRow(await api.deleteNote(recordId, noteId)) : null,
+      onResolve:
+        isAuthor && status === 'changes_requested'
+          ? async (noteId, resolved) => applyRow(await api.resolveNote(recordId, noteId, resolved))
+          : null,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [readOnly, meta, canNote, isAuthor, status, recordId],
+  )
+
+  // Saves what is on screen so the server sends the same content to the reviewers.
+  async function flushForSend() {
+    if (status === 'completed') {
+      const missing = Object.keys(REQUIRED).filter((k) => !plainText(data[k]).trim())
+      if (missing.length) throw new Error(`${t('missingFields')} ${missing.map((k) => t(REQUIRED[k])).join(', ')}`)
+      const snapshot = data
+      await persist('completed', JSON.stringify(snapshot), (rid) => api.update(rid, 'completed', snapshot))
+    } else {
+      await autosave()
+      await chainRef.current
+    }
+  }
+
+  async function openPicker() {
+    setNotice(null)
+    if (status === 'changes_requested' && openNotes) {
+      setNotice({ kind: 'error', text: t('resolveFirst') })
+      return
+    }
+    try {
+      const reviewers = await api.reviewers()
+      setPicker({ reviewers, picked: new Set(meta.approvals.map((a) => a.userId)), busy: false, error: '' })
+    } catch {
+      setNotice({ kind: 'error', text: t('sendError') })
+    }
+  }
+
+  async function sendToReview() {
+    if (!picker.picked.size) return setPicker({ ...picker, error: t('chooseAtLeastOne') })
+    setPicker({ ...picker, busy: true, error: '' })
+    try {
+      await flushForSend()
+      applyRow(await api.submit(recordId, [...picker.picked]))
+      setPicker(null)
+      setNotice({ kind: 'ok', text: t('sentOk') })
+    } catch (e) {
+      setPicker((p) => ({ ...p, busy: false, error: e.status ? (e.code === 'open_comments' ? t('resolveFirst') : t('sendError')) : e.message }))
+    }
+  }
+
+  async function startSigning() {
+    setNotice(null)
+    try {
+      const r = await api.mySignature()
+      if (!r.signature || !myApproval?.role) throw Object.assign(new Error('no signature'), { code: 'no_signature' })
+      setSigning({ src: r.signature })
+      setShowPreview(true)
+    } catch (e) {
+      setNotice({ kind: 'error', text: e.code === 'no_signature' ? t('signNoSignature') : t('signError') })
+    }
+  }
+
+  async function signNow(place) {
+    setFlowBusy(true)
+    setNotice(null)
+    try {
+      applyRow(await api.sign(recordId, place))
+      setSigning(null)
+    } catch (e) {
+      const text = e.code === 'no_signature' ? t('signNoSignature') : e.code === 'open_comments' ? t('signBlockedNotes') : t('signError')
+      setNotice({ kind: 'error', text })
+    } finally {
+      setFlowBusy(false)
+    }
+  }
+
   async function generate() {
     setBusy(true)
     try {
-      const blob = await renderPdfBlob(data)
+      const blob = await renderPdfBlob(previewData)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -298,7 +404,7 @@ export default function FormPage({ id, onBack, onDone }) {
   }
 
   // The preview only re-renders when the debounced value changes.
-  const previewData = useMemo(() => data, [data])
+  const previewData = useMemo(() => ({ ...data, signatures: signaturesFrom(meta.approvals) }), [data, meta.approvals])
 
   if (loading) return <p className="note" style={{ padding: 24 }}>{t('loading')}</p>
   if (loadError) {
@@ -314,6 +420,7 @@ export default function FormPage({ id, onBack, onDone }) {
 
   return (
     <ImageStore.Provider value={imageStore}>
+    <ReviewContext.Provider value={review}>
     <div className={`form-page ${showPreview ? 'show-preview' : ''}`}>
       <div className="form-col">
         <div className="form-head">
@@ -323,7 +430,19 @@ export default function FormPage({ id, onBack, onDone }) {
           <h1>{recordId ? `${t('formTitle')} #${recordId}` : t('formTitle')}</h1>
         </div>
 
-        <TextField plain label={t('docTitle')} hint={t('docTitleHint')} value={data.docTitle} onChange={set('docTitle')} />
+        {recordId && status && (
+          <div className="review-banner">
+            <span className={`status-badge s-${status}`}>{t(`status_${status}`)}</span>{' '}
+            {frozen && t('lockedHint')}
+            {status === 'changes_requested' && isAuthor && t('changesHint')}
+            {!isAuthor && !frozen && t('notReviewerHint')}
+            {myApproval && underReview && ' ' + t('signHint')}
+          </div>
+        )}
+
+        <Locked>
+          <TextField plain label={t('docTitle')} hint={t('docTitleHint')} value={data.docTitle} onChange={set('docTitle')} />
+        </Locked>
 
         <Block n={1} title={t('s1')}>
           <div className="grid g5">
@@ -351,13 +470,14 @@ export default function FormPage({ id, onBack, onDone }) {
         </Block>
 
         <Block n={4} title={t('s4')}>
-          <div className="checks">
+          <div className="checks cols">
             <Check label={t('scrap')} checked={p.scrap} onChange={setIn('parts', 'scrap')} />
-            <Check label={t('rework')} checked={p.rework} onChange={setIn('parts', 'rework')} />
+            <Check col={2} label={t('rework')} checked={p.rework} onChange={setIn('parts', 'rework')} />
             <Check label={t('sorting')} checked={p.sorting} onChange={setIn('parts', 'sorting')} />
-            <Check label={t('useAsIs')} checked={p.useAsIs} onChange={setIn('parts', 'useAsIs')} />
-            <Check indent={1} label={t('risk')} checked={p.risk} onChange={setIn('parts', 'risk')} />
+            <Check col={2} label={t('useAsIs')} checked={p.useAsIs} onChange={setIn('parts', 'useAsIs')} />
+            <Check col={2} indent={1} label={t('risk')} checked={p.risk} onChange={setIn('parts', 'risk')} />
             <Check
+              col={2}
               indent={1}
               label={t('otherDocs')}
               checked={p.otherDocs}
@@ -372,11 +492,12 @@ export default function FormPage({ id, onBack, onDone }) {
         </Block>
 
         <Block n={5} title={t('s5')}>
-          <div className="checks">
+          <div className="checks cols">
             <Check label={t('stop')} checked={pr.stop} onChange={setIn('process', 'stop')} />
-            <Check label={t('concession')} checked={pr.concession} onChange={setIn('process', 'concession')} />
-            <Check indent={1} label={t('risk')} checked={pr.risk} onChange={setIn('process', 'risk')} />
+            <Check col={2} label={t('concession')} checked={pr.concession} onChange={setIn('process', 'concession')} />
+            <Check col={2} indent={1} label={t('risk')} checked={pr.risk} onChange={setIn('process', 'risk')} />
             <Check
+              col={2}
               indent={1}
               label={t('otherDocs')}
               checked={pr.otherDocs}
@@ -396,13 +517,14 @@ export default function FormPage({ id, onBack, onDone }) {
         </Block>
 
         <Block n={6} title={t('s6')}>
-          <div className="checks">
+          <div className="checks cols">
             <Check label={t('toolRepair')} checked={c.toolRepair} onChange={setIn('corrective', 'toolRepair')} />
-            <Check label={t('dfm')} checked={c.dfm} onChange={setIn('corrective', 'dfm')} />
-            <Check label={t('fai')} checked={c.fai} onChange={setIn('corrective', 'fai')} />
-            <Check label={t('cpk')} checked={c.cpk} onChange={setIn('corrective', 'cpk')} />
-            <Check indent={1} label={t('cpkAll')} checked={c.cpkAll} onChange={setIn('corrective', 'cpkAll')} />
+            <Check col={2} label={t('dfm')} checked={c.dfm} onChange={setIn('corrective', 'dfm')} />
+            <Check col={2} label={t('fai')} checked={c.fai} onChange={setIn('corrective', 'fai')} />
+            <Check col={2} label={t('cpk')} checked={c.cpk} onChange={setIn('corrective', 'cpk')} />
+            <Check col={2} indent={1} label={t('cpkAll')} checked={c.cpkAll} onChange={setIn('corrective', 'cpkAll')} />
             <Check
+              col={2}
               indent={1}
               label={t('cpkSelected')}
               checked={c.cpkSelected}
@@ -412,8 +534,9 @@ export default function FormPage({ id, onBack, onDone }) {
               placeholder={t('specify')}
               below
             />
-            <Check label={t('sample')} checked={c.sample} onChange={setIn('corrective', 'sample')} />
+            <Check col={2} label={t('sample')} checked={c.sample} onChange={setIn('corrective', 'sample')} />
             <Check
+              wide
               label={t('other')}
               checked={c.other}
               onChange={setIn('corrective', 'other')}
@@ -431,21 +554,49 @@ export default function FormPage({ id, onBack, onDone }) {
           <YesNoField label={t('infoCustomer')} value={data.infoCustomer} onChange={set('infoCustomer')} yes={t('yes')} no={t('no')} />
         </Block>
 
-        {auto && status !== 'completed' && (
+        {meta.approvals.length > 0 && (
+          <div className="review-panel">
+            <h3>{t('reviewersStatus')}</h3>
+            <ul>
+              {meta.approvals.map((a) => (
+                <li key={a.userId}>
+                  {a.signedAt ? '✓' : '○'} <b>{a.name}</b> ({ROLE_LABELS[a.role] ?? '–'}) –{' '}
+                  {a.signedAt
+                    ? `${t('signedOn')} ${formatDate(new Date(a.signedAt))}`
+                    : t('pendingSign')}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {auto && !NO_AUTOSAVE.includes(status) && !readOnly && (
           <p className={auto.kind === 'error' ? 'error' : 'note'} style={{ fontSize: 12, margin: '4px 0' }}>
             {auto.kind === 'saving' ? t('autoSaving') : auto.kind === 'saved' ? `${t('autoSaved')} ${auto.time}` : t('autoError')}
           </p>
         )}
         {notice && <p className={notice.kind === 'ok' ? 'note ok' : 'error'}>{notice.text}</p>}
         <div className="actions">
-          {status !== 'completed' && (
+          {!readOnly && (status === null || status === 'draft') && (
             <button type="button" className="btn" onClick={() => save('draft')} disabled={saving}>
               {t('saveDraft')}
             </button>
           )}
-          <button type="button" className="btn primary" onClick={() => save('completed')} disabled={saving}>
-            {status === 'completed' ? t('saveChanges') : t('complete')}
-          </button>
+          {!readOnly && status !== 'changes_requested' && (
+            <button type="button" className={status === 'completed' ? 'btn' : 'btn primary'} onClick={() => save('completed')} disabled={saving}>
+              {status === 'completed' ? t('saveChanges') : t('complete')}
+            </button>
+          )}
+          {isAuthor && recordId && (status === 'completed' || status === 'changes_requested') && (
+            <button type="button" className="btn primary" onClick={openPicker} disabled={saving}>
+              {status === 'completed' ? t('sendToReview') : t('sendAgain')}
+            </button>
+          )}
+          {myApproval && (status === 'submitted' || status === 'signed') && !myApproval.signedAt && (
+            <button type="button" className="btn primary" onClick={startSigning} disabled={flowBusy || Boolean(signing)}>
+              {t('sign')}
+            </button>
+          )}
           <button type="button" className="btn" onClick={generate} disabled={busy}>
             {busy ? t('generating') : t('generate')}
           </button>
@@ -458,13 +609,53 @@ export default function FormPage({ id, onBack, onDone }) {
       </div>
 
       <div className="preview-col">
-        <PdfPreview data={previewData} />
+        <PdfPreview
+          data={previewData}
+          signing={signing && { src: signing.src, busy: flowBusy, onApply: signNow, onCancel: () => setSigning(null) }}
+        />
       </div>
 
       <button type="button" className="btn primary preview-toggle" onClick={() => setShowPreview((v) => !v)}>
         {showPreview ? t('hidePreview') : t('preview')}
       </button>
+      {picker && (
+        <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !picker.busy && setPicker(null)}>
+          <div className="modal" role="dialog" aria-modal="true">
+            <h2>{t('chooseReviewers')}</h2>
+            {picker.reviewers.length === 0 && <p className="note">{t('noReviewers')}</p>}
+            <div className="reviewer-list">
+              {picker.reviewers.map((r) => (
+                <label key={r.id} className="check">
+                  <input
+                    type="checkbox"
+                    checked={picker.picked.has(r.id)}
+                    onChange={(e) => {
+                      const picked = new Set(picker.picked)
+                      if (e.target.checked) picked.add(r.id)
+                      else picked.delete(r.id)
+                      setPicker({ ...picker, picked, error: '' })
+                    }}
+                  />
+                  <span>
+                    {r.name} <span className="note">({ROLE_LABELS[r.role] ?? r.role})</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {picker.error && <p className="error">{picker.error}</p>}
+            <div className="modal-actions">
+              <button type="button" className="btn" disabled={picker.busy} onClick={() => setPicker(null)}>
+                {t('cancel')}
+              </button>
+              <button type="button" className="btn primary" disabled={picker.busy || !picker.reviewers.length} onClick={sendToReview}>
+                {picker.busy ? t('sending') : t('send')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+    </ReviewContext.Provider>
     </ImageStore.Provider>
   )
 }

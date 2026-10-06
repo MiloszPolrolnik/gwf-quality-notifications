@@ -189,7 +189,7 @@ body {
   min-width: 0;
 }
 .field-label {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   color: #3b4a5f;
 }
@@ -215,6 +215,7 @@ textarea {
 .grid {
   display: grid;
   gap: 0 12px;
+  align-items: start;
 }
 .g2 {
   grid-template-columns: 1fr 1fr;
@@ -233,6 +234,12 @@ textarea {
   flex-direction: column;
   gap: 6px;
   margin-bottom: 12px;
+}
+/* two columns like the template: left items in column 1, the rest in column 2 */
+.checks.cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
 }
 .check {
   display: flex;
@@ -339,10 +346,23 @@ textarea {
 }
 
 /* Top row of block 1: labels may wrap, inputs stay on one line. */
-.g5 .field-label {
-  flex: 1;
-  display: flex;
-  align-items: flex-start;
+.g5 {
+  align-items: start;
+}
+/* labels share one row, inputs share the next, so a wrapped label
+   doesn't push its own input below the neighbours' */
+.g5 > .field {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+  gap: 0;
+}
+.g5 > .field > .field-label {
+  margin-bottom: 4px;
+}
+/* the shared input row is as tall as the tallest field; don't stretch the others to it */
+.g5 > .field > :not(.field-label) {
+  align-self: start;
 }
 
 /* --- drafts / history ------------------------------------------------- */
@@ -532,7 +552,8 @@ textarea {
   width: calc(100% - 26px);
 }
 
-.block > .rich {
+.block > .rich,
+.block > div > .rich {
   margin-bottom: 10px;
 }
 
@@ -571,4 +592,409 @@ textarea {
   bottom: -6px;
   left: -6px;
   cursor: nesw-resize;
+}
+
+/* --- login / registration ---------------------------------------------- */
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.user-name {
+  color: var(--text);
+  font-size: 14px;
+}
+.auth {
+  display: flex;
+  justify-content: center;
+  padding: 48px 16px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 24px;
+}
+.auth-card h1 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--blue);
+}
+.auth-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+.auth-card input {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+}
+.auth-card small {
+  color: #667;
+}
+.auth-error {
+  margin: 0;
+  color: #b3261e;
+  font-size: 14px;
+}
+
+/* --- review workflow: notes, status, reviewers, profile ----------------- */
+.block.has-notes {
+  border-color: #e0a100;
+  box-shadow: 0 0 0 1px #e0a100;
+}
+.note-btn {
+  margin-left: auto;
+  padding: 2px 8px;
+  font-size: 15px;
+  background: #fff8d6;
+  border: 1px solid #e0c34d;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.note-btn span {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.note-btn.open {
+  background: #ffe680;
+}
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.note-card {
+  padding: 8px 12px;
+  background: #fff3a8;
+  border-radius: 4px;
+  box-shadow: 1px 2px 4px rgba(0, 0, 0, 0.15);
+  font-size: 14px;
+}
+.note-card.done {
+  background: #ececec;
+  color: #6b7a8f;
+}
+.note-card p {
+  margin: 2px 0 6px;
+  white-space: pre-wrap;
+}
+.note-add {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.note-add textarea {
+  flex: 1;
+  padding: 6px 8px;
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.status-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #e6ebf1;
+  color: #3b4a5f;
+}
+.status-badge.s-submitted {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.status-badge.s-changes_requested {
+  background: #ffe680;
+  color: #7a5a00;
+}
+.status-badge.s-signed {
+  background: #d1fae5;
+  color: #065f46;
+}
+.review-banner {
+  margin: 12px 0;
+  padding: 10px 14px;
+  background: #eef3f9;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 14px;
+}
+.review-panel {
+  margin: 12px 0;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.review-panel h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+.review-panel ul {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+.review-panel li {
+  padding: 3px 0;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(20, 30, 45, 0.45);
+}
+.modal {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: #fff;
+  border-radius: 8px;
+}
+.modal h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--blue);
+}
+.modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+.modal select,
+.auth-card select {
+  padding: 8px;
+  font: inherit;
+}
+.signature-preview {
+  max-width: 100%;
+  max-height: 90px;
+  align-self: flex-start;
+  background: repeating-conic-gradient(#f0f0f0 0% 25%, #fff 0% 50%) 0 0 / 14px 14px;
+  border: 1px solid var(--line);
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.reviewer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+/* --- animations ------------------------------------------------------- */
+.btn,
+.lang button {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(30, 60, 100, 0.22);
+}
+.btn:not(.primary):not(.ghost):hover:not(:disabled) {
+  background: #eef3f9;
+}
+.btn.primary:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+.btn.ghost:hover:not(:disabled) {
+  background: #eef3f9;
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.96);
+  box-shadow: none;
+  transition-duration: 0.05s;
+}
+.lang button:hover {
+  transform: translateY(-1px);
+}
+.lang button:active {
+  transform: scale(0.93);
+}
+
+input[type='text'],
+textarea,
+.rich {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+input[type='text']:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue);
+}
+
+.check {
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.check:hover {
+  transform: translateX(3px);
+  color: var(--blue);
+}
+.check input {
+  transition: transform 0.15s ease;
+}
+.check input:active {
+  transform: scale(1.35);
+}
+
+.block {
+  animation: rise-in 0.45s ease both;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.block:hover {
+  box-shadow: 0 4px 16px rgba(30, 60, 100, 0.1);
+}
+.block:nth-of-type(2) { animation-delay: 0.05s; }
+.block:nth-of-type(3) { animation-delay: 0.1s; }
+.block:nth-of-type(4) { animation-delay: 0.15s; }
+
+.modal-backdrop {
+  animation: fade-in 0.2s ease both;
+}
+.modal {
+  animation: pop-in 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.review-panel li {
+  animation: rise-in 0.35s ease both;
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.9) translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* --- signature placement (like Acrobat) ------------------------------ */
+.preview-page-wrap {
+  position: relative;
+  margin: 0 0 12px;
+}
+.preview-page-wrap .preview-page {
+  margin: 0;
+}
+.sign-bar {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  right: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: #fff;
+  border: 1px solid var(--blue);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  animation: rise-in 0.3s ease both;
+}
+.sign-bar span {
+  flex: 1;
+  min-width: 200px;
+}
+.sign-ghost {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  opacity: 0.6;
+}
+.preview.signing .preview-scroll {
+  cursor: crosshair;
+  padding-top: 76px;
+}
+.placed-sig {
+  position: absolute;
+  z-index: 4;
+  outline: 1px dashed var(--blue);
+  background: rgba(30, 90, 150, 0.06);
+  cursor: move;
+  touch-action: none;
+}
+.placed-sig img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+.placed-sig .handle {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 13px;
+  height: 13px;
+  background: var(--blue);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  cursor: nwse-resize;
+}
+
+/* hover animation for form controls (registration, profile) */
+.auth-card select,
+.auth-card input,
+.modal select {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.auth-card input[type='text'],
+.auth-card input[type='email'],
+.auth-card input[type='password'] {
+  cursor: text;
+}
+.auth-card select:hover,
+.auth-card input:hover,
+.modal select:hover {
+  transform: translateY(-2px);
+  border-color: var(--blue);
+  box-shadow: 0 4px 10px rgba(30, 60, 100, 0.18);
+}
+.auth-card select:focus,
+.modal select:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue);
 }
