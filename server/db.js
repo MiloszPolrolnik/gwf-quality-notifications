@@ -291,7 +291,7 @@ export function getUser(userId) {
 // People the author can send a notification to: everyone who picked a signing column.
 export function listReviewers() {
   return db
-    .prepare('SELECT id, name, role FROM users WHERE role IS NOT NULL ORDER BY name COLLATE NOCASE')
+    .prepare('SELECT id, name, email, role FROM users WHERE role IS NOT NULL ORDER BY name COLLATE NOCASE')
     .all()
 }
 

@@ -14,7 +14,8 @@ function fmt(iso, lang) {
 
 // What each list shows: statuses (comma separated), "mine: reviewer" = only what was sent to me.
 const KINDS = {
-  drafts: { status: 'draft,changes_requested' },
+  drafts: { status: 'draft' },
+  changes: { status: 'changes_requested' },
   history: { status: 'completed,submitted,signed' },
   review: { status: 'submitted,changes_requested,signed', mine: 'reviewer' },
 }
@@ -22,7 +23,8 @@ const KINDS = {
 // Lists drafts, the history of finished notifications, or the ones sent to me for review.
 export default function ListPage({ kind, onOpen, onBack }) {
   const { t, lang } = useI18n()
-  const isDraft = kind === 'drafts'
+  const isChanges = kind === 'changes'
+  const isDraft = kind === 'drafts' || isChanges
   const isReview = kind === 'review'
   const { status, mine } = KINDS[kind]
   const [rows, setRows] = useState(null)
@@ -81,7 +83,7 @@ export default function ListPage({ kind, onOpen, onBack }) {
         <button type="button" className="btn ghost" onClick={onBack}>
           ← {t('back')}
         </button>
-        <h1>{isDraft ? t('draftsTitle') : isReview ? t('reviewTitle') : t('historyTitle')}</h1>
+        <h1>{isChanges ? t('changesTitle') : isDraft ? t('draftsTitle') : isReview ? t('reviewTitle') : t('historyTitle')}</h1>
       </div>
 
       <input
@@ -93,7 +95,7 @@ export default function ListPage({ kind, onOpen, onBack }) {
       />
       {error && <p className="error">{error}</p>}
 
-      {rows && rows.length === 0 && <p className="note">{isDraft ? t('noDrafts') : isReview ? t('noReview') : t('noHistory')}</p>}
+      {rows && rows.length === 0 && <p className="note">{isChanges ? t('noChanges') : isDraft ? t('noDrafts') : isReview ? t('noReview') : t('noHistory')}</p>}
 
       {rows && rows.length > 0 && (
         <div className="table-wrap">

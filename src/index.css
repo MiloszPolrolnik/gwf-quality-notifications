@@ -802,7 +802,25 @@ textarea {
   flex-direction: column;
   gap: 6px;
   max-height: 260px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.reviewer-list .check {
+  flex-direction: row-reverse; /* overrides the column layout of `.modal label`; checkbox after the text */
+  justify-content: flex-end; /* with row-reverse: packs the group to the left */
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+.reviewer-list .check:hover {
+  transform: none;
+}
+.reviewer-list .check input {
+  flex: none;
+  margin: 0;
+}
+.reviewer-list .check .note {
+  display: block;
 }
 
 /* --- animations ------------------------------------------------------- */

@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n.jsx'
-import { emptyData, formatDate, pdfFileName, signaturesFrom, ROLE_LABELS } from '../pdf/data.js'
+import { emptyData, sampleData, formatDate, pdfFileName, signaturesFrom, ROLE_LABELS } from '../pdf/data.js'
 import { Block, Check, TextField, RichField, YesNoField, ReviewContext, Locked } from './fields.jsx'
 import RichEditor, { ImageStore } from './RichEditor.jsx'
 import ImagePicker from './ImagePicker.jsx'
 import PdfPreview, { renderPdfBlob } from './PdfPreview.jsx'
 import { api } from '../api.js'
-import { dropImages, imageIds, plainText } from '../richText.js'
+import { dropImages, imageIds } from '../richText.js'
 
 const STORE = 'qn-form-v1'
 const AUTOSAVE_DELAY = 2000
@@ -60,8 +60,6 @@ function load() {
   return fresh()
 }
 
-// Fields required to complete a notification (must match server/index.js).
-const REQUIRED = { date: 'date', partNo: 'partNo', partDesc: 'partDesc', applicant: 'applicant', department: 'department', problem: 's2' }
 
 export default function FormPage({ id, user, onBack, onDone }) {
   const { t } = useI18n()
@@ -277,8 +275,6 @@ export default function FormPage({ id, user, onBack, onDone }) {
   // Saves what is on screen so the server sends the same content to the reviewers.
   async function flushForSend() {
     if (status === 'completed') {
-      const missing = Object.keys(REQUIRED).filter((k) => !plainText(data[k]).trim())
-      if (missing.length) throw new Error(`${t('missingFields')} ${missing.map((k) => t(REQUIRED[k])).join(', ')}`)
       const snapshot = data
       await persist('completed', JSON.stringify(snapshot), (rid) => api.update(rid, 'completed', snapshot))
     } else {
@@ -367,30 +363,25 @@ export default function FormPage({ id, user, onBack, onDone }) {
     setData(fresh())
   }
 
+  function fillSample() {
+    if (!window.confirm(t('fillSampleConfirm'))) return
+    setData(structuredClone(sampleData))
+  }
+
   // Saves as draft or completed. Completing validates the required fields.
   async function save(target) {
     setNotice(null)
-    if (target === 'completed') {
-      const missing = Object.keys(REQUIRED).filter((k) => !plainText(data[k]).trim())
-      if (missing.length) {
-        setNotice({ kind: 'error', text: `${t('missingFields')} ${missing.map((k) => t(REQUIRED[k])).join(', ')}` })
-        return
-      }
-    }
     setSaving(true)
     try {
       const snapshot = data
-      await persist(target, JSON.stringify(snapshot), (rid) =>
+      const row = await persist(target, JSON.stringify(snapshot), (rid) =>
         rid ? api.update(rid, target, snapshot) : api.create(target, snapshot),
       )
-      if (target === 'completed') {
-        onDone('completed')
-        return
-      }
-      setStatus('draft')
-      setNotice({ kind: 'ok', text: t('draftSaved') })
+      // Stay on the form: for a completed record the "send to reviewers" button shows up right away.
+      applyRow({ ...row, status: target })
+      setNotice({ kind: 'ok', text: t(target === 'completed' ? 'completedSaved' : 'draftSaved') })
     } catch (e) {
-      setNotice({ kind: 'error', text: e.status === 422 ? t('missingFields') : t('saveError') })
+      setNotice({ kind: 'error', text: t('saveError') })
     } finally {
       setSaving(false)
     }
@@ -600,6 +591,11 @@ export default function FormPage({ id, user, onBack, onDone }) {
           <button type="button" className="btn" onClick={generate} disabled={busy}>
             {busy ? t('generating') : t('generate')}
           </button>
+          {!readOnly && (status === null || status === 'draft') && (
+            <button type="button" className="btn" onClick={fillSample}>
+              {t('fillSample')}
+            </button>
+          )}
           {!recordId && (
             <button type="button" className="btn" onClick={reset}>
               {t('reset')}
@@ -637,7 +633,8 @@ export default function FormPage({ id, user, onBack, onDone }) {
                     }}
                   />
                   <span>
-                    {r.name} <span className="note">({ROLE_LABELS[r.role] ?? r.role})</span>
+                    {r.name}
+                    <span className="note">{r.email}</span>
                   </span>
                 </label>
               ))}

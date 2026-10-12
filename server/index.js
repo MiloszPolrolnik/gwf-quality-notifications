@@ -1,7 +1,6 @@
 import express from 'express'
 import * as db from './db.js'
 import { authRoutes, loadUser, requireAuth } from './auth.js'
-import { plainText } from '../src/richText.js'
 import { sendMail, formLink } from './mail.js'
 
 const app = express()
@@ -9,17 +8,6 @@ app.use(express.json({ limit: '25mb' }))
 app.use(loadUser)
 authRoutes(app)
 app.use('/api/notifications', requireAuth)
-
-// Fields that must be filled in before a notification can be marked completed.
-// Drafts have no requirements.
-const REQUIRED_FOR_COMPLETION = [
-  'date',
-  'partNo',
-  'partDesc',
-  'applicant',
-  'department',
-  'problem',
-]
 
 function parseBody(body) {
   const status = body?.status
@@ -29,10 +17,6 @@ function parseBody(body) {
   }
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return { error: 'data must be an object' }
-  }
-  if (status === 'completed') {
-    const missing = REQUIRED_FOR_COMPLETION.filter((k) => !plainText(data[k]).trim())
-    if (missing.length) return { error: 'missing required fields', missing, code: 422 }
   }
   return { status, data }
 }

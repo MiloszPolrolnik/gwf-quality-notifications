@@ -19,6 +19,7 @@ function parseRoute() {
   if (m) return { name: 'form', id: Number(m[1]) }
   if (h === '/form') return { name: 'form', id: null }
   if (h === '/drafts') return { name: 'drafts' }
+  if (h === '/changes') return { name: 'changes' }
   if (h === '/history') return { name: 'history' }
   if (h === '/review') return { name: 'review' }
   return { name: 'landing' }
@@ -85,6 +86,9 @@ function Shell() {
       {user && route.name === 'drafts' && (
         <ListPage key="drafts" kind="drafts" onOpen={(id) => go(`#/form/${id}`)} onBack={() => go('#/')} />
       )}
+      {user && route.name === 'changes' && (
+        <ListPage key="changes" kind="changes" onOpen={(id) => go(`#/form/${id}`)} onBack={() => go('#/')} />
+      )}
       {user && route.name === 'history' && (
         <ListPage key="history" kind="history" onOpen={(id) => go(`#/form/${id}`)} onBack={() => go('#/')} />
       )}
@@ -102,6 +106,9 @@ function Shell() {
             </button>
             <button type="button" className="btn big" onClick={() => go('#/drafts')}>
               {t('drafts')}
+            </button>
+            <button type="button" className="btn big" onClick={() => go('#/changes')}>
+              {t('changes')}
             </button>
             <button type="button" className="btn big" onClick={() => go('#/history')}>
               {t('history')}
