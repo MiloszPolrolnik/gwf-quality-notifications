@@ -41,6 +41,8 @@ function keepalive(path, method, body) {
 export const api = {
   me: () => request('/auth/me'),
   login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  forgotPassword: (email) => request('/auth/forgot', { method: 'POST', body: JSON.stringify({ email }) }),
+  resetPassword: (token, password) => request('/auth/reset', { method: 'POST', body: JSON.stringify({ token, password }) }),
   register: (name, email, password, role, signature) =>
     request('/auth/register', {
       method: 'POST',
@@ -64,11 +66,14 @@ export const api = {
   // review workflow
   reviewers: () => request('/reviewers'),
   submit: (id, reviewerIds) => request(`/notifications/${id}/submit`, { method: 'POST', body: JSON.stringify({ reviewerIds }) }),
+  addReviewers: (id, reviewerIds) =>
+    request(`/notifications/${id}/reviewers`, { method: 'POST', body: JSON.stringify({ reviewerIds }) }),
   addNote: (id, fieldKey, text) =>
     request(`/notifications/${id}/comments`, { method: 'POST', body: JSON.stringify({ fieldKey, text }) }),
   resolveNote: (id, noteId, resolved) =>
     request(`/notifications/${id}/comments/${noteId}`, { method: 'PATCH', body: JSON.stringify({ resolved }) }),
   deleteNote: (id, noteId) => request(`/notifications/${id}/comments/${noteId}`, { method: 'DELETE' }),
+  requestChanges: (id) => request(`/notifications/${id}/request-changes`, { method: 'POST' }),
   sign: (id, place = {}) => request(`/notifications/${id}/sign`, { method: 'POST', body: JSON.stringify(place) }),
   // profile: role = signing column, signature = data URL (undefined keeps, null removes)
   saveProfile: (profile) => request('/profile', { method: 'PUT', body: JSON.stringify(profile) }),

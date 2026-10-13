@@ -119,6 +119,18 @@ const full = (id) => ({ ...db.get(id), approvals: db.getApprovals(id), comments:
 const label = (row) => `Quality Notification #${row.id}${row.partNo ? ` (${row.partNo})` : ''}`
 const isReviewer = (id, userId) => db.getApprovals(id).some((a) => a.userId === userId)
 
+function mailReviewers(row, from, reviewers) {
+  for (const r of reviewers) {
+    const u = db.getUser(r.id)
+    sendMail({
+      to: u.email,
+      subject: `${label(row)} – Prüfung und Unterschrift erbeten`,
+      text: `Hallo ${u.name},\n\n${from.name} bittet Sie, ${label(row)} zu prüfen und zu unterschreiben oder Änderungen anzufordern.`,
+      link: formLink(row.id, u.id),
+    })
+  }
+}
+
 // Author sends a completed (or corrected) notification to the chosen reviewers.
 app.post('/api/notifications/:id/submit', (req, res) => {
   const row = workflowTarget(req, res)
@@ -136,15 +148,26 @@ app.post('/api/notifications/:id/submit', (req, res) => {
     return res.status(409).json({ error: 'resolve all notes first', code: 'open_comments' })
   }
   db.submit(row.id, ids)
-  for (const r of reviewers) {
-    const u = db.getUser(r.id)
-    sendMail({
-      to: u.email,
-      subject: `${label(row)} – Prüfung und Unterschrift erbeten`,
-      text: `Hallo ${u.name},\n\n${req.user.name} bittet Sie, ${label(row)} zu prüfen und zu unterschreiben oder Änderungen anzufordern.`,
-      link: formLink(row.id),
-    })
+  mailReviewers(row, req.user, reviewers)
+  res.json(full(row.id))
+})
+
+// Author adds reviewers to a notification already sent (e.g. somebody was forgotten); existing ones stay.
+app.post('/api/notifications/:id/reviewers', (req, res) => {
+  const row = workflowTarget(req, res)
+  if (!row) return
+  if (row.authorId !== req.user.id) return res.status(403).json({ error: 'only the author can add reviewers' })
+  if (!['submitted', 'changes_requested', 'signed'].includes(row.status)) {
+    return res.status(409).json({ error: 'notification was not sent yet' })
   }
+  const have = new Set(db.getApprovals(row.id).map((a) => a.userId))
+  const ids = [...new Set(Array.isArray(req.body?.reviewerIds) ? req.body.reviewerIds.map(Number) : [])]
+  const reviewers = db.listReviewers().filter((r) => ids.includes(r.id) && !have.has(r.id))
+  if (!reviewers.length || reviewers.length !== ids.length) {
+    return res.status(400).json({ error: 'choose at least one new valid reviewer' })
+  }
+  db.addReviewers(row.id, ids)
+  mailReviewers(row, req.user, reviewers)
   res.json(full(row.id))
 })
 
@@ -159,18 +182,28 @@ app.post('/api/notifications/:id/comments', (req, res) => {
   const text = String(req.body?.text ?? '').trim()
   const fieldKey = String(req.body?.fieldKey ?? '')
   if (!text || text.length > 2000 || !/^s[1-7]$/.test(fieldKey)) return res.status(400).json({ error: 'invalid note' })
-  const wasSubmitted = row.status === 'submitted'
   db.addComment(row.id, req.user.id, fieldKey, text)
+  res.status(201).json(full(row.id))
+})
+
+// Reviewer sends the collected notes back: status changes and the author gets one mail (without the notes).
+app.post('/api/notifications/:id/request-changes', (req, res) => {
+  const row = workflowTarget(req, res)
+  if (!row) return
+  if (row.status !== 'submitted') return res.status(409).json({ error: 'notification is not under review' })
+  if (!isReviewer(row.id, req.user.id)) return res.status(403).json({ error: 'not a reviewer of this notification' })
+  if (!db.openCommentCount(row.id)) return res.status(409).json({ error: 'add a note first', code: 'no_notes' })
+  db.requestChanges(row.id)
   const author = row.authorId && db.getUser(row.authorId)
-  if (wasSubmitted && author) {
+  if (author) {
     sendMail({
       to: author.email,
       subject: `${label(row)} – Änderungen erbeten`,
-      text: `Hallo ${author.name},\n\n${req.user.name} hat zu ${label(row)} Anmerkungen hinterlassen:\n\n"${text}"`,
-      link: formLink(row.id),
+      text: `Hallo ${author.name},\n\n${req.user.name} bittet um Änderungen in ${label(row)}.`,
+      link: formLink(row.id, author.id),
     })
   }
-  res.status(201).json(full(row.id))
+  res.json(full(row.id))
 })
 
 // Author marks a note as handled (or reopens it).
@@ -215,18 +248,15 @@ app.post('/api/notifications/:id/sign', (req, res) => {
   const place = { page: num(b.page, 1, 50), x: num(b.x, 0, 1), y: num(b.y, 0, 1), w: num(b.w, 0.02, 1), h: num(b.h, 0.01, 1) }
   if (Object.values(place).some((v) => v === null)) Object.assign(place, { page: null, x: null, y: null, w: null, h: null })
   db.sign(row.id, req.user.id, me.signature, place)
-  // one mail, only when the last required person has signed: to the author and all signers
+  // one mail, only when the last required person has signed: to the author only
   if (row.status === 'submitted' && db.allSigned(row.id)) {
-    const recipients = new Map()
-    if (row.authorId) recipients.set(row.authorId, db.getUser(row.authorId))
-    for (const a of db.getApprovals(row.id)) recipients.set(a.userId, db.getUser(a.userId))
-    for (const u of recipients.values()) {
-      if (!u) continue
+    const author = row.authorId && db.getUser(row.authorId)
+    if (author) {
       sendMail({
-        to: u.email,
+        to: author.email,
         subject: `${label(row)} – von allen unterschrieben`,
-        text: `Hallo ${u.name},\n\n${label(row)} wurde von allen erforderlichen Personen unterschrieben.`,
-        link: formLink(row.id),
+        text: `Hallo ${author.name},\n\n${label(row)} wurde von allen erforderlichen Personen unterschrieben.`,
+        link: formLink(row.id, author.id),
       })
     }
   }

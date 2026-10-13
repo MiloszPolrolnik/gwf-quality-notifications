@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n.jsx'
-import { emptyData, sampleData, formatDate, pdfFileName, signaturesFrom, ROLE_LABELS } from '../pdf/data.js'
+import { emptyData, sampleData, formatDate, pdfFileName, signaturesFrom } from '../pdf/data.js'
 import { Block, Check, TextField, RichField, YesNoField, ReviewContext, Locked } from './fields.jsx'
 import RichEditor, { ImageStore } from './RichEditor.jsx'
 import ImagePicker from './ImagePicker.jsx'
@@ -297,12 +297,27 @@ export default function FormPage({ id, user, onBack, onDone }) {
     }
   }
 
+  // Author of an already sent notification: pick further reviewers (the ones it went to are left out).
+  async function openAddPicker() {
+    setNotice(null)
+    try {
+      const have = new Set(meta.approvals.map((a) => a.userId))
+      const reviewers = (await api.reviewers()).filter((r) => !have.has(r.id))
+      setPicker({ reviewers, picked: new Set(), busy: false, error: '', adding: true })
+    } catch {
+      setNotice({ kind: 'error', text: t('sendError') })
+    }
+  }
+
   async function sendToReview() {
     if (!picker.picked.size) return setPicker({ ...picker, error: t('chooseAtLeastOne') })
     setPicker({ ...picker, busy: true, error: '' })
     try {
-      await flushForSend()
-      applyRow(await api.submit(recordId, [...picker.picked]))
+      if (picker.adding) applyRow(await api.addReviewers(recordId, [...picker.picked]))
+      else {
+        await flushForSend()
+        applyRow(await api.submit(recordId, [...picker.picked]))
+      }
       setPicker(null)
       setNotice({ kind: 'ok', text: t('sentOk') })
     } catch (e) {
@@ -319,6 +334,19 @@ export default function FormPage({ id, user, onBack, onDone }) {
       setShowPreview(true)
     } catch (e) {
       setNotice({ kind: 'error', text: e.code === 'no_signature' ? t('signNoSignature') : t('signError') })
+    }
+  }
+
+  async function requestChanges() {
+    setNotice(null)
+    setFlowBusy(true)
+    try {
+      applyRow(await api.requestChanges(recordId))
+      setNotice({ kind: 'ok', text: t('requestChangesOk') })
+    } catch {
+      setNotice({ kind: 'error', text: t('requestChangesError') })
+    } finally {
+      setFlowBusy(false)
     }
   }
 
@@ -551,7 +579,7 @@ export default function FormPage({ id, user, onBack, onDone }) {
             <ul>
               {meta.approvals.map((a) => (
                 <li key={a.userId}>
-                  {a.signedAt ? '✓' : '○'} <b>{a.name}</b> ({ROLE_LABELS[a.role] ?? '–'}) –{' '}
+                  {a.signedAt ? '✓' : '○'} <b>{a.name}</b> <span className="note">({a.email})</span> –{' '}
                   {a.signedAt
                     ? `${t('signedOn')} ${formatDate(new Date(a.signedAt))}`
                     : t('pendingSign')}
@@ -583,9 +611,19 @@ export default function FormPage({ id, user, onBack, onDone }) {
               {status === 'completed' ? t('sendToReview') : t('sendAgain')}
             </button>
           )}
+          {isAuthor && recordId && (status === 'submitted' || status === 'signed') && (
+            <button type="button" className="btn" onClick={openAddPicker} disabled={saving}>
+              {t('addReviewers')}
+            </button>
+          )}
           {myApproval && (status === 'submitted' || status === 'signed') && !myApproval.signedAt && (
             <button type="button" className="btn primary" onClick={startSigning} disabled={flowBusy || Boolean(signing)}>
               {t('sign')}
+            </button>
+          )}
+          {myApproval && status === 'submitted' && openNotes > 0 && (
+            <button type="button" className="btn primary" onClick={requestChanges} disabled={flowBusy}>
+              {t('requestChanges')}
             </button>
           )}
           <button type="button" className="btn" onClick={generate} disabled={busy}>
@@ -617,8 +655,8 @@ export default function FormPage({ id, user, onBack, onDone }) {
       {picker && (
         <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !picker.busy && setPicker(null)}>
           <div className="modal" role="dialog" aria-modal="true">
-            <h2>{t('chooseReviewers')}</h2>
-            {picker.reviewers.length === 0 && <p className="note">{t('noReviewers')}</p>}
+            <h2>{picker.adding ? t('addReviewers') : t('chooseReviewers')}</h2>
+            {picker.reviewers.length === 0 && <p className="note">{picker.adding ? t('noMoreReviewers') : t('noReviewers')}</p>}
             <div className="reviewer-list">
               {picker.reviewers.map((r) => (
                 <label key={r.id} className="check">

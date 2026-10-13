@@ -202,6 +202,13 @@ db.exec(`
     expires_at  TEXT NOT NULL
   );
 `)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS password_resets (
+    token_hash  TEXT PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at  TEXT NOT NULL
+  );
+`)
 // where the reviewer placed the signature on the document: page and position/size as fractions of the page
 for (const col of ['sig_page', 'sig_x', 'sig_y', 'sig_w', 'sig_h']) {
   if (!db.prepare('PRAGMA table_info(approvals)').all().some((c) => c.name === col)) {
@@ -275,6 +282,26 @@ export function setPassword(email, passwordHash) {
   return true
 }
 
+// One open reset link per user: a new request replaces the old one.
+export function createPasswordReset(tokenHash, userId, expiresAt) {
+  db.prepare('DELETE FROM password_resets WHERE user_id = ? OR expires_at < ?').run(userId, new Date().toISOString())
+  db.prepare('INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, ?)').run(tokenHash, userId, expiresAt)
+}
+
+// Consumes the token: returns the user id once, null if unknown or expired.
+export function consumePasswordReset(tokenHash) {
+  const row = db.prepare('SELECT user_id, expires_at FROM password_resets WHERE token_hash = ?').get(tokenHash)
+  if (!row) return null
+  db.prepare('DELETE FROM password_resets WHERE token_hash = ?').run(tokenHash)
+  return row.expires_at > new Date().toISOString() ? row.user_id : null
+}
+
+export function setPasswordById(userId, passwordHash) {
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, userId)
+  // log the user out everywhere
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId)
+}
+
 export function deleteUser(email) {
   return db.prepare('DELETE FROM users WHERE email = ?').run(email).changes > 0
 }
@@ -346,6 +373,13 @@ export function submit(id, reviewerIds) {
   return get(id)
 }
 
+// Adds reviewers without touching existing signatures; a fully signed notification waits for the new ones.
+export function addReviewers(id, reviewerIds) {
+  const ins = db.prepare('INSERT OR IGNORE INTO approvals (notification_id, user_id) VALUES (?, ?)')
+  for (const uid of reviewerIds) ins.run(id, uid)
+  if (get(id).status === 'signed') setStatus(id, 'submitted')
+}
+
 export function addComment(id, userId, fieldKey, text) {
   db.prepare('INSERT INTO comments (notification_id, user_id, field_key, text) VALUES (?, ?, ?, ?)').run(
     id,
@@ -353,6 +387,9 @@ export function addComment(id, userId, fieldKey, text) {
     fieldKey,
     text,
   )
+}
+
+export function requestChanges(id) {
   setStatus(id, 'changes_requested')
 }
 

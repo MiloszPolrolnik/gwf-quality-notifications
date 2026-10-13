@@ -15,8 +15,11 @@ const BASE = import.meta.env.BASE_URL
 //   #/review      notifications sent to me for review
 function parseRoute() {
   const h = location.hash.replace(/^#/, '')
-  const m = h.match(/^\/form\/(\d+)$/)
-  if (m) return { name: 'form', id: Number(m[1]) }
+  // ?for=<userId> comes from mail links: the form only opens for that account
+  const m = h.match(/^\/form\/(\d+)(?:\?for=(\d+))?$/)
+  if (m) return { name: 'form', id: Number(m[1]), forUser: m[2] ? Number(m[2]) : null }
+  const r = h.match(/^\/reset\/([\w-]+)$/)
+  if (r) return { name: 'reset', token: r[1] }
   if (h === '/form') return { name: 'form', id: null }
   if (h === '/drafts') return { name: 'drafts' }
   if (h === '/changes') return { name: 'changes' }
@@ -31,6 +34,15 @@ function Shell() {
   // undefined = still checking the session, null = logged out
   const [user, setUser] = useState(undefined)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [wrongAccount, setWrongAccount] = useState(false)
+  // a mail link meant for another account: sign out so the right one can log in
+  const mismatch = Boolean(user && route.forUser && route.forUser !== user.id)
+  useEffect(() => {
+    if (!mismatch) return
+    setWrongAccount(true)
+    api.logout().catch(() => {})
+    setUser(null)
+  }, [mismatch])
   useEffect(() => {
     setUnauthorizedHandler(() => setUser(null))
     api.me().then(setUser, () => setUser(null))
@@ -73,8 +85,18 @@ function Shell() {
           <LanguageSwitch />
         </div>
       </header>
-      {user === null && <AuthPage onAuth={setUser} />}
-      {user && route.name === 'form' && (
+      {(user === null || (user !== undefined && route.name === 'reset')) && (
+        <AuthPage
+          onAuth={setUser}
+          resetToken={route.name === 'reset' ? route.token : null}
+          notice={wrongAccount && route.forUser ? t('wrongAccountLink') : ''}
+          onResetDone={() => {
+            setUser(null)
+            location.hash = '#/'
+          }}
+        />
+      )}
+      {user && !mismatch && route.name === 'form' && (
         <FormPage
           key={route.id ?? 'new'}
           id={route.id}
@@ -107,11 +129,11 @@ function Shell() {
             <button type="button" className="btn big" onClick={() => go('#/drafts')}>
               {t('drafts')}
             </button>
-            <button type="button" className="btn big" onClick={() => go('#/changes')}>
-              {t('changes')}
-            </button>
             <button type="button" className="btn big" onClick={() => go('#/history')}>
               {t('history')}
+            </button>
+            <button type="button" className="btn big" onClick={() => go('#/changes')}>
+              {t('changes')}
             </button>
             <button type="button" className="btn big" onClick={() => go('#/review')}>
               {t('review')}

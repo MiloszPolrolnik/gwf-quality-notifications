@@ -1,12 +1,14 @@
 import crypto from 'node:crypto'
 import { promisify } from 'node:util'
 import * as db from './db.js'
+import { sendMail, appUrl } from './mail.js'
 
 const scrypt = promisify(crypto.scrypt)
 
 const COOKIE = 'qn_session'
 const SESSION_DAYS = 14
 const MIN_PASSWORD = 8
+const RESET_MINUTES = 60
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export async function hashPassword(password) {
@@ -61,6 +63,11 @@ function noteFailure(key) {
   else f.count++
 }
 
+// At most one reset mail per e-mail per minute.
+const resets = new Map()
+const tooManyResets = (key) => (resets.get(key) ?? 0) > Date.now()
+const noteReset = (key) => resets.set(key, Date.now() + 60_000)
+
 export function loadUser(req, _res, next) {
   const token = readCookie(req, COOKIE)
   req.user = token ? db.findSessionUser(sha256(token)) : null
@@ -109,6 +116,35 @@ export function authRoutes(app) {
     failures.delete(key)
     startSession(res, row.id)
     res.json(db.toPublicUser(row))
+  })
+
+  // Always answers 204 so nobody can probe which e-mails are registered.
+  app.post('/api/auth/forgot', async (req, res) => {
+    const email = String(req.body?.email ?? '').trim().toLowerCase()
+    const key = `reset|${email}`
+    const row = EMAIL_RE.test(email) ? db.findUserByEmail(email) : null
+    if (row && !tooManyResets(key)) {
+      noteReset(key)
+      const token = crypto.randomBytes(32).toString('base64url')
+      db.createPasswordReset(sha256(token), row.id, new Date(Date.now() + RESET_MINUTES * 60_000).toISOString())
+      sendMail({
+        to: row.email,
+        subject: 'Passwort zurücksetzen',
+        text: `Hallo ${row.name},\n\nüber den folgenden Link können Sie ein neues Passwort festlegen. Der Link ist ${RESET_MINUTES} Minuten gültig. Wenn Sie das nicht angefordert haben, können Sie diese Mail ignorieren.`,
+        link: `${appUrl()}/#/reset/${token}`,
+      })
+    }
+    res.status(204).end()
+  })
+
+  app.post('/api/auth/reset', async (req, res) => {
+    const token = String(req.body?.token ?? '')
+    const password = String(req.body?.password ?? '')
+    if (password.length < MIN_PASSWORD) return res.status(400).json({ error: 'password too short', field: 'password' })
+    const userId = token ? db.consumePasswordReset(sha256(token)) : null
+    if (!userId) return res.status(400).json({ error: 'invalid or expired link', code: 'bad_token' })
+    db.setPasswordById(userId, await hashPassword(password))
+    res.status(204).end()
   })
 
   app.post('/api/auth/logout', (req, res) => {

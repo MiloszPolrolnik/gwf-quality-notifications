@@ -2,9 +2,10 @@
 // Configure with RESEND_API_KEY, MAIL_FROM ("GWF Quality <qn@yourdomain>") and APP_URL
 // (public address of the app, used for links). Without an API key mails are only logged.
 
-const APP_URL = () => (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '')
+export const appUrl = () => (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '')
 
-export const formLink = (id) => `${APP_URL()}/#/form/${id}`
+// "for" = the account the mail went to: the app only opens the link for that account
+export const formLink = (id, userId) => `${appUrl()}/#/form/${id}?for=${userId}`
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 
