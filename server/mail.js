@@ -31,7 +31,7 @@ export async function sendMail({ to, subject, text, link }) {
     if (!res.ok) console.error(`[mail] Resend ${res.status}: ${await res.text()}`)
     return res.ok
   } catch (e) {
-    console.error('[mail] failed:', e.message)
+    console.error('[mail] failed:', e.message, e.cause?.code || e.cause?.message || '')
     return false
   }
 }
