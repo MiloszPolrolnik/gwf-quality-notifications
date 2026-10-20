@@ -117,7 +117,18 @@ function Shell() {
       {user && route.name === 'review' && (
         <ListPage key="review" kind="review" onOpen={(id) => go(`#/form/${id}`)} onBack={() => go('#/')} />
       )}
-      {user && profileOpen && <ProfileDialog user={user} onSaved={setUser} onClose={() => setProfileOpen(false)} />}
+      {user && profileOpen && (
+        <ProfileDialog
+          user={user}
+          onSaved={setUser}
+          onClose={() => setProfileOpen(false)}
+          onDeleted={() => {
+            setProfileOpen(false)
+            setUser(null)
+            location.hash = '#/'
+          }}
+        />
+      )}
       {user && route.name === 'landing' && (
         <main className="landing">
           <h1>{t('landingTitle')}</h1>

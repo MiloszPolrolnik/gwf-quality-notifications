@@ -798,25 +798,30 @@ textarea {
   justify-content: flex-end;
 }
 .reviewer-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  /* two shared columns: the text column is as wide as the longest name, so all checkboxes line up right next to it */
+  display: grid;
+  grid-template-columns: max-content max-content;
+  justify-content: start;
+  row-gap: 6px;
   max-height: 260px;
   overflow-x: hidden;
   overflow-y: auto;
 }
 .reviewer-list .check {
-  flex-direction: row-reverse; /* overrides the column layout of `.modal label`; checkbox after the text */
-  justify-content: flex-end; /* with row-reverse: packs the group to the left */
+  display: grid; /* overrides the layout of `.modal label` */
+  grid-template-columns: subgrid;
+  grid-column: span 2;
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
   text-align: left;
+}
+.reviewer-list .check input {
+  order: 1; /* checkbox after the text, in the second column */
 }
 .reviewer-list .check:hover {
   transform: none;
 }
 .reviewer-list .check input {
-  flex: none;
   margin: 0;
 }
 .reviewer-list .check .note {

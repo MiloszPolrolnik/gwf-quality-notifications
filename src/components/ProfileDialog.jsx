@@ -4,7 +4,7 @@ import { api } from '../api.js'
 import { ROLE_LABELS } from '../pdf/data.js'
 import { processSignature } from '../signature.js'
 
-export default function ProfileDialog({ user, onSaved, onClose }) {
+export default function ProfileDialog({ user, onSaved, onClose, onDeleted }) {
   const { t } = useI18n()
   const [role, setRole] = useState(user.role ?? '')
   const [signature, setSignature] = useState(undefined) // undefined = unchanged, null = removed, string = new
@@ -12,6 +12,20 @@ export default function ProfileDialog({ user, onSaved, onClose }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const fileRef = useRef(null)
+  const [deleting, setDeleting] = useState(false)
+  const [password, setPassword] = useState('')
+
+  async function deleteAccount() {
+    setBusy(true)
+    setMsg(null)
+    try {
+      await api.deleteAccount(password)
+      onDeleted()
+    } catch (e) {
+      setMsg({ kind: 'error', text: e.status === 401 ? t('deleteAccountBadPassword') : t('deleteAccountError') })
+      setBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (user.hasSignature) api.mySignature().then((r) => setCurrent(r.signature), () => {})
@@ -83,14 +97,35 @@ export default function ProfileDialog({ user, onSaved, onClose }) {
           </div>
         </div>
         {msg && <p className={msg.kind === 'ok' ? 'note ok' : 'error'}>{msg.text}</p>}
-        <div className="modal-actions">
-          <button type="button" className="btn" onClick={onClose}>
-            {t('close')}
-          </button>
-          <button type="button" className="btn primary" disabled={busy} onClick={save}>
-            {t('save')}
-          </button>
-        </div>
+        {deleting ? (
+          <>
+            <p className="error">{t('deleteAccountWarn')}</p>
+            <label>
+              {t('deleteAccountPassword')}
+              <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </label>
+            <div className="modal-actions">
+              <button type="button" className="btn" disabled={busy} onClick={() => { setDeleting(false); setPassword(''); setMsg(null) }}>
+                {t('cancel')}
+              </button>
+              <button type="button" className="btn primary" disabled={busy || !password} onClick={deleteAccount}>
+                {t('deleteAccountConfirm')}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="modal-actions">
+            <button type="button" className="btn ghost" style={{ marginRight: 'auto' }} onClick={() => setDeleting(true)}>
+              {t('deleteAccount')}
+            </button>
+            <button type="button" className="btn" onClick={onClose}>
+              {t('close')}
+            </button>
+            <button type="button" className="btn primary" disabled={busy} onClick={save}>
+              {t('save')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

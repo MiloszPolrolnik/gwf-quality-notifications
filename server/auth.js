@@ -154,6 +154,21 @@ export function authRoutes(app) {
     res.status(204).end()
   })
 
+  // Deleting the account needs the current password, so a stolen session alone cannot do it.
+  app.delete('/api/auth/account', async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'not authenticated' })
+    const key = `delete|${req.user.id}|${req.ip}`
+    if (tooManyFailures(key)) return res.status(429).json({ error: 'too many attempts' })
+    const row = db.getUser(req.user.id)
+    if (!(await verifyPassword(String(req.body?.password ?? ''), row.password_hash))) {
+      noteFailure(key)
+      return res.status(401).json({ error: 'invalid credentials' })
+    }
+    db.deleteAccount(req.user.id)
+    res.setHeader('Set-Cookie', `${COOKIE}=; ${cookieAttrs(0)}`)
+    res.status(204).end()
+  })
+
   app.get('/api/auth/me', (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'not authenticated' })
     res.json(req.user)

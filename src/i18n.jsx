@@ -205,6 +205,12 @@ export const dictionary = {
     close: 'Close',
     profileSaved: 'Saved.',
     profileError: 'Saving failed.',
+    deleteAccount: 'Delete account',
+    deleteAccountWarn: 'This permanently deletes your account, your notifications and your notes and signatures on other notifications. This cannot be undone.',
+    deleteAccountPassword: 'Enter your password to confirm',
+    deleteAccountConfirm: 'Delete permanently',
+    deleteAccountBadPassword: 'Wrong password.',
+    deleteAccountError: 'The account could not be deleted.',
   },
   de: {
     logout: 'Abmelden',
@@ -409,6 +415,12 @@ export const dictionary = {
     close: 'Schließen',
     profileSaved: 'Gespeichert.',
     profileError: 'Speichern fehlgeschlagen.',
+    deleteAccount: 'Konto löschen',
+    deleteAccountWarn: 'Dadurch werden Ihr Konto, Ihre Meldungen sowie Ihre Notizen und Unterschriften in anderen Meldungen endgültig gelöscht. Das kann nicht rückgängig gemacht werden.',
+    deleteAccountPassword: 'Zur Bestätigung Passwort eingeben',
+    deleteAccountConfirm: 'Endgültig löschen',
+    deleteAccountBadPassword: 'Falsches Passwort.',
+    deleteAccountError: 'Das Konto konnte nicht gelöscht werden.',
   },
 }
 

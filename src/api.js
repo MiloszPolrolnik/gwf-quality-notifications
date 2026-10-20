@@ -48,6 +48,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, email, password, role: role || null, signature: signature || null }),
     }),
+  deleteAccount: (password) => request('/auth/account', { method: 'DELETE', body: JSON.stringify({ password }) }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   list: ({ status, q, mine } = {}) => {
     const params = new URLSearchParams()

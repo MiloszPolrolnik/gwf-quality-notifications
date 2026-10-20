@@ -302,6 +302,40 @@ export function setPasswordById(userId, passwordHash) {
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId)
 }
 
+// Removes the account with everything it owns: its notifications (with their approvals and notes),
+// its own notes and signatures on other people's notifications, and its sessions.
+// Notifications that were waiting only on this person are re-evaluated afterwards.
+export function deleteAccount(userId) {
+  db.exec('BEGIN')
+  try {
+    db.prepare('DELETE FROM notifications WHERE author_id = ?').run(userId)
+    const affected = db
+      .prepare(
+        `SELECT DISTINCT notification_id AS id FROM approvals WHERE user_id = ?
+         UNION SELECT DISTINCT notification_id FROM comments WHERE user_id = ?`,
+      )
+      .all(userId, userId)
+    db.prepare('DELETE FROM approvals WHERE user_id = ?').run(userId)
+    db.prepare('DELETE FROM comments WHERE user_id = ?').run(userId)
+    db.prepare('DELETE FROM hidden_for WHERE user_id = ?').run(userId)
+    for (const { id } of affected) {
+      const n = get(id)
+      if (!n) continue
+      if (n.status === 'changes_requested' && !openCommentCount(id)) setStatus(id, 'submitted')
+      if ((n.status === 'submitted' || n.status === 'changes_requested') && allSigned(id) && !openCommentCount(id)) {
+        setStatus(id, 'signed')
+      }
+    }
+    db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(userId)
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId)
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId)
+    db.exec('COMMIT')
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
+  }
+}
+
 export function deleteUser(email) {
   return db.prepare('DELETE FROM users WHERE email = ?').run(email).changes > 0
 }
