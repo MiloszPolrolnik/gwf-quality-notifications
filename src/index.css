@@ -386,10 +386,49 @@ textarea {
   padding: 5px 8px;
 }
 .landing-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  max-width: 460px;
+  margin: 32px auto 0;
+}
+.landing-actions .btn.big {
+  width: 100%;
+  margin-top: 0;
+  padding: 16px 12px;
+}
+.landing-actions .btn.primary {
+  grid-column: 1 / -1;
+}
+.landing-actions .btn:hover:not(:disabled),
+.landing-actions .btn:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+.landing-item {
+  position: relative;
+}
+.landing-count {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  background: var(--blue);
+  color: #fff;
+  border: 2px solid var(--bg);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 1;
+}
+.landing-count.zero {
+  background: #9aa7b6;
 }
 .list-page {
   max-width: 1100px;

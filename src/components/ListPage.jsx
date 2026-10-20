@@ -13,7 +13,7 @@ function fmt(iso, lang) {
 }
 
 // What each list shows: statuses (comma separated), "mine: reviewer" = only what was sent to me.
-const KINDS = {
+export const KINDS = {
   drafts: { status: 'draft' },
   changes: { status: 'changes_requested' },
   history: { status: 'completed,submitted,signed' },

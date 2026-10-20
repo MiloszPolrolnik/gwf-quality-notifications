@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { I18nProvider, useI18n } from './i18n.jsx'
 import LanguageSwitch from './components/LanguageSwitch.jsx'
 import FormPage from './components/FormPage.jsx'
-import ListPage from './components/ListPage.jsx'
+import ListPage, { KINDS } from './components/ListPage.jsx'
 import AuthPage from './components/AuthPage.jsx'
 import ProfileDialog from './components/ProfileDialog.jsx'
 import { api, setUnauthorizedHandler } from './api.js'
@@ -47,6 +47,22 @@ function Shell() {
     setUnauthorizedHandler(() => setUser(null))
     api.me().then(setUser, () => setUser(null))
   }, [])
+  // Number of documents per category, shown above the landing buttons.
+  const [counts, setCounts] = useState({})
+  const onLanding = Boolean(user) && route.name === 'landing'
+  useEffect(() => {
+    if (!onLanding) return
+    let alive = true
+    Object.entries(KINDS).forEach(([kind, { status, mine }]) => {
+      api
+        .list({ status, mine })
+        .then((rows) => alive && setCounts((c) => ({ ...c, [kind]: rows.length })))
+        .catch(() => {})
+    })
+    return () => {
+      alive = false
+    }
+  }, [onLanding])
   useEffect(() => {
     const on = () => setRoute(parseRoute())
     window.addEventListener('hashchange', on)
@@ -137,18 +153,21 @@ function Shell() {
             <button type="button" className="btn primary big" onClick={() => go('#/form')}>
               {t('fillOut')}
             </button>
-            <button type="button" className="btn big" onClick={() => go('#/drafts')}>
-              {t('drafts')}
-            </button>
-            <button type="button" className="btn big" onClick={() => go('#/history')}>
-              {t('history')}
-            </button>
-            <button type="button" className="btn big" onClick={() => go('#/changes')}>
-              {t('changes')}
-            </button>
-            <button type="button" className="btn big" onClick={() => go('#/review')}>
-              {t('review')}
-            </button>
+            {[
+              ['drafts', t('drafts')],
+              ['history', t('history')],
+              ['changes', t('changes')],
+              ['review', t('review')],
+            ].map(([kind, label]) => (
+              <div className="landing-item" key={kind}>
+                {counts[kind] !== undefined && (
+                  <span className={`landing-count${counts[kind] === 0 ? ' zero' : ''}`}>{counts[kind]}</span>
+                )}
+                <button type="button" className="btn big" onClick={() => go(`#/${kind}`)}>
+                  {label}
+                </button>
+              </div>
+            ))}
           </div>
         </main>
       )}
