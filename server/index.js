@@ -42,7 +42,8 @@ app.get('/api/notifications', (req, res) => {
       q: typeof q === 'string' ? q.trim() : undefined,
       // every list is per account: own notifications, or the ones sent to me for review
       reviewerId: mine === 'reviewer' ? req.user.id : undefined,
-      authorId: mine === 'reviewer' ? undefined : req.user.id,
+      historyOf: mine === 'history' ? req.user.id : undefined,
+      authorId: mine === 'reviewer' || mine === 'history' ? undefined : req.user.id,
     }),
   )
 })

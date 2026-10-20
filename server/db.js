@@ -114,8 +114,9 @@ function toApi(row, { withData = true } = {}) {
 }
 
 // status: one status or an array of them; authorId: only that user's own notifications;
-// reviewerId: only notifications sent to that user.
-export function list({ status, q, reviewerId, authorId } = {}) {
+// reviewerId: only notifications sent to that user which they have not signed yet;
+// historyOf: that user's own notifications plus the ones they reviewed and signed.
+export function list({ status, q, reviewerId, authorId, historyOf } = {}) {
   const where = []
   const params = []
   const statuses = [].concat(status ?? [])
@@ -128,8 +129,14 @@ export function list({ status, q, reviewerId, authorId } = {}) {
     params.push(authorId)
   }
   if (reviewerId) {
-    where.push('id IN (SELECT notification_id FROM approvals WHERE user_id = ?)', 'id NOT IN (SELECT notification_id FROM hidden_for WHERE user_id = ?)')
+    where.push('id IN (SELECT notification_id FROM approvals WHERE user_id = ? AND signed_at IS NULL)', 'id NOT IN (SELECT notification_id FROM hidden_for WHERE user_id = ?)')
     params.push(reviewerId, reviewerId)
+  }
+  if (historyOf) {
+    where.push(
+      '(author_id = ? OR (id IN (SELECT notification_id FROM approvals WHERE user_id = ? AND signed_at IS NOT NULL) AND id NOT IN (SELECT notification_id FROM hidden_for WHERE user_id = ?)))',
+    )
+    params.push(historyOf, historyOf, historyOf)
   }
   if (q) {
     where.push('(part_no LIKE ? OR part_description LIKE ? OR applicant LIKE ? OR CAST(id AS TEXT) = ?)')

@@ -12,12 +12,12 @@ function fmt(iso, lang) {
   })
 }
 
-// What each list shows: statuses (comma separated), "mine: reviewer" = only what was sent to me.
+// What each list shows: statuses (comma separated), "mine: reviewer" = sent to me and not yet signed by me, "mine: history" = my own plus what I signed.
 export const KINDS = {
   drafts: { status: 'draft' },
   changes: { status: 'changes_requested' },
-  history: { status: 'completed,submitted,signed' },
-  review: { status: 'submitted,changes_requested,signed', mine: 'reviewer' },
+  history: { status: 'completed,submitted,signed', mine: 'history' },
+  review: { status: 'submitted,changes_requested', mine: 'reviewer' },
 }
 
 // Lists drafts, the history of finished notifications, or the ones sent to me for review.
@@ -124,7 +124,7 @@ export default function ListPage({ kind, onOpen, onBack }) {
                   <td>{fmt(isDraft ? r.updatedAt : isReview ? r.submittedAt || r.updatedAt : r.completedAt, lang)}</td>
                   <td className="row-actions">
                     <button type="button" className="btn primary" onClick={() => onOpen(r.id)}>
-                      {isDraft ? t('continueEditing') : isReview ? t('review') : t('edit')}
+                      {isDraft ? t('continueEditing') : isReview ? t('review') : r.status === 'signed' ? t('open') : t('edit')}
                     </button>
                     {!isDraft && (
                       <button type="button" className="btn" disabled={busyId === r.id} onClick={() => download(r)}>
