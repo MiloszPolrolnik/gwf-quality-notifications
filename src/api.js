@@ -81,3 +81,32 @@ export const api = {
   mySignature: () => request('/profile/signature'),
   remove: (id) => request(`/notifications/${id}`, { method: 'DELETE' }),
 }
+
+// Quality Notifications Tracking ('/tracking') and Sonderfreigaben Tracking ('/sonderfreigaben'):
+// company-wide tables with the same API. value null = back to the value of the notification (custom columns: empty the cell).
+export const trackingApi = (base) => ({
+  years: () => request(`${base}/years`),
+  list: (year, filters) => request(`${base}/${year}?${trackingQuery(filters)}`),
+  columns: () => request(`${base}/columns`),
+  addColumn: (col) => request(`${base}/columns`, { method: 'POST', body: JSON.stringify(col) }),
+  updateColumn: (id, col) => request(`${base}/columns/${id}`, { method: 'PATCH', body: JSON.stringify(col) }),
+  deleteColumn: (id) => request(`${base}/columns/${id}`, { method: 'DELETE' }),
+  setCell: (id, field, value) => request(`${base}/rows/${id}`, { method: 'PATCH', body: JSON.stringify({ field, value }) }),
+  addRow: (year) => request(`${base}/${year}/rows`, { method: 'POST' }),
+  deleteRow: (id) => request(`${base}/rows/${id}`, { method: 'DELETE' }),
+  // -> Blob of the .xlsx
+  async exportXlsx(year, filters) {
+    const res = await fetch(`/api${base}/${year}/export.xlsx?${trackingQuery(filters)}`)
+    if (res.status === 401) onUnauthorized()
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.blob()
+  },
+})
+export const qnTracking = trackingApi('/tracking')
+export const sfTracking = trackingApi('/sonderfreigaben')
+
+function trackingQuery({ status, supplier, responsible, search } = {}) {
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries({ status, supplier, responsible, search })) if (v) params.set(k, v)
+  return params
+}

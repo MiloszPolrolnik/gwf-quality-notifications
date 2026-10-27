@@ -9,8 +9,9 @@ export const formLink = (id, userId) => `${appUrl()}/#/form/${id}?for=${userId}`
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 
-export async function sendMail({ to, subject, text, link }) {
-  const html = `<p>${esc(text).replace(/\n/g, '<br>')}</p><p><a href="${esc(link)}">${esc(link)}</a></p>`
+// linkText = visible label of the link in the HTML mail (defaults to the URL itself)
+export async function sendMail({ to, subject, text, link, linkText }) {
+  const html = `<p>${esc(text).replace(/\n/g, '<br>')}</p><p><a href="${esc(link)}">${esc(linkText || link)}</a></p>`
   const key = process.env.RESEND_API_KEY
   if (!key) {
     console.log(`[mail disabled] to=${to} subject="${subject}"\n${text}\n${link}`)

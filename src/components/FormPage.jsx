@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n.jsx'
 import { emptyData, sampleData, formatDate, pdfFileName, signaturesFrom } from '../pdf/data.js'
-import { Block, Check, TextField, RichField, YesNoField, ReviewContext, Locked } from './fields.jsx'
+import { Block, Check, Field, TextField, RichField, YesNoField, ReviewContext, Locked } from './fields.jsx'
 import RichEditor, { ImageStore } from './RichEditor.jsx'
 import ImagePicker from './ImagePicker.jsx'
 import PdfPreview, { renderPdfBlob } from './PdfPreview.jsx'
@@ -472,6 +472,13 @@ export default function FormPage({ id, user, onBack, onDone }) {
             <TextField multiline label={t('batchQty')} value={data.batchQty} onChange={set('batchQty')} />
           </div>
           <TextField multiline label={t('qnNo')} value={data.qnNo} onChange={set('qnNo')} />
+          <Field label={t('pswType')}>
+            <select value={data.pswType} onChange={(e) => set('pswType')(e.target.value)} disabled={readOnly}>
+              <option value="" />
+              <option value="Serie">Serie</option>
+              <option value="Projekt">Projekt</option>
+            </select>
+          </Field>
           <div className="grid g2">
             <TextField multiline label={t('applicant')} value={data.applicant} onChange={set('applicant')} />
             <TextField multiline label={t('department')} value={data.department} onChange={set('department')} />

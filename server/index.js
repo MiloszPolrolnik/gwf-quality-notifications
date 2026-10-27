@@ -2,12 +2,19 @@ import express from 'express'
 import * as db from './db.js'
 import { authRoutes, loadUser, requireAuth } from './auth.js'
 import { sendMail, formLink } from './mail.js'
+import { trackingRoutes, OVERVIEW_DIR } from './tracking.js'
+import { sonderfreigabenRoutes, SONDERFREIGABEN_DIR } from './sonderfreigaben.js'
+import { importFolder } from './tracking-import.js'
 
 const app = express()
 app.use(express.json({ limit: '25mb' }))
 app.use(loadUser)
 authRoutes(app)
 app.use('/api/notifications', requireAuth)
+app.use('/api/tracking', requireAuth)
+trackingRoutes(app)
+app.use('/api/sonderfreigaben', requireAuth)
+sonderfreigabenRoutes(app)
 
 function parseBody(body) {
   const status = body?.status
@@ -52,8 +59,10 @@ app.get('/api/notifications/:id', (req, res) => {
   const id = parseId(req, res)
   if (id === null) return
   const row = db.get(id)
-  // visible to the author and to the people it was sent to
-  if (!row || (row.authorId !== req.user.id && !db.getApprovals(id).some((a) => a.userId === req.user.id))) {
+  // drafts: the author only. Everything else is listed in Quality Tracking, so every account may
+  // open it read-only (editing, signing and notes stay limited to the author / the reviewers).
+  // Imported rows have no form content.
+  if (!row || row.imported || (row.status === 'draft' && row.authorId !== req.user.id)) {
     return res.status(404).json({ error: 'not found' })
   }
   res.json({ ...row, approvals: db.getApprovals(id), comments: db.getComments(id) })
@@ -126,8 +135,9 @@ function mailReviewers(row, from, reviewers) {
     sendMail({
       to: u.email,
       subject: `${label(row)} – Prüfung und Unterschrift erbeten`,
-      text: `Hallo ${u.name},\n\n${from.name} bittet Sie, ${label(row)} zu prüfen und zu unterschreiben oder Änderungen anzufordern.`,
+      text: `Hallo ${u.name},\n\n${from.name} bittet Sie, Quality Notification zu prüfen und zu unterschreiben oder Änderungen anzufordern.`,
       link: formLink(row.id, u.id),
+      linkText: label(row),
     })
   }
 }
@@ -281,3 +291,8 @@ app.delete('/api/notifications/:id', (req, res) => {
 
 const port = Number(process.env.PORT) || 3001
 app.listen(port, () => console.log(`QN API listening on http://localhost:${port}`))
+
+// Excel overviews in the folder end up in Quality Tracking automatically (numbers already known are skipped).
+importFolder(OVERVIEW_DIR)
+  .then(() => importFolder(SONDERFREIGABEN_DIR, 'sf'))
+  .catch((e) => console.error('Tracking import failed:', e.message))

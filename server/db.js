@@ -87,12 +87,59 @@ db.exec(`
 `)
 db.exec('PRAGMA foreign_keys = ON')
 
+// Quality Tracking columns. Added one by one so existing rows and data stay untouched.
+// imported = row came from the Excel overview (no author, no form data).
+for (const [col, ddl] of [
+  ['qn_no', 'TEXT'],
+  ['qn_year', 'INTEGER'],
+  ['psw_type', "TEXT NOT NULL DEFAULT ''"],
+  ['supplier_no', "TEXT NOT NULL DEFAULT ''"],
+  ['supplier_name', "TEXT NOT NULL DEFAULT ''"],
+  ['reason', "TEXT NOT NULL DEFAULT ''"],
+  ['measures', "TEXT NOT NULL DEFAULT ''"],
+  ['release_until_or_qty', "TEXT NOT NULL DEFAULT ''"],
+  ['responsible', "TEXT NOT NULL DEFAULT ''"],
+  ['qn_status', "TEXT NOT NULL DEFAULT ''"],
+  ['tracking_status', "TEXT NOT NULL DEFAULT ''"],
+  ['imported', 'INTEGER NOT NULL DEFAULT 0'],
+]) {
+  if (!db.prepare('PRAGMA table_info(notifications)').all().some((c) => c.name === col)) {
+    db.exec(`ALTER TABLE notifications ADD COLUMN ${col} ${ddl}`)
+  }
+}
+db.exec(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_qn_no ON notifications (qn_no) WHERE qn_no IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_notifications_qn_year ON notifications (qn_year);
+`)
+
+const join = (parts, sep) =>
+  parts
+    .map((p) => plainText(p).trim())
+    .filter(Boolean)
+    .join(sep)
+
+// Columns derived from the form: list views, search and the Quality Tracking table.
 function summary(data) {
   return {
     part_no: plainText(data.partNo),
     part_description: plainText(data.partDesc),
     applicant: plainText(data.applicant),
+    psw_type: data.pswType === 'Serie' || data.pswType === 'Projekt' ? data.pswType : '',
+    supplier_name: plainText(data.supplier),
+    reason: plainText(data.problem),
+    measures: join([data.parts?.details, data.process?.details, data.corrective?.details], '\n'),
+    release_until_or_qty: join([data.process?.until, data.process?.quantity], ' / '),
+    responsible: plainText(data.applicant),
   }
+}
+
+// Next free QN number of a year, YY-NNN: continues the highest one, imported rows included.
+function nextQnNo(year) {
+  const yy = String(year % 100).padStart(2, '0')
+  const row = db
+    .prepare('SELECT MAX(CAST(SUBSTR(qn_no, 4) AS INTEGER)) AS n FROM notifications WHERE qn_no GLOB ?')
+    .get(`${yy}-[0-9]*`)
+  return `${yy}-${String((row.n ?? 0) + 1).padStart(3, '0')}`
 }
 
 function toApi(row, { withData = true } = {}) {
@@ -108,6 +155,8 @@ function toApi(row, { withData = true } = {}) {
     completedAt: row.completed_at,
     submittedAt: row.submitted_at,
     authorId: row.author_id,
+    qnNo: row.qn_no,
+    imported: Boolean(row.imported),
   }
   if (withData) out.data = JSON.parse(row.data)
   return out
@@ -154,12 +203,18 @@ export function get(id) {
 export function create({ status, data }, authorId = null) {
   const s = summary(data)
   const completedAt = status === 'completed' ? new Date().toISOString() : null
+  // the QN number is allocated with the first save and never changes afterwards
+  const year = new Date().getFullYear()
   const res = db
     .prepare(
-      `INSERT INTO notifications (status, part_no, part_description, applicant, data, completed_at, author_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO notifications (status, part_no, part_description, applicant, data, completed_at, author_id,
+                                  qn_no, qn_year, psw_type, supplier_name, reason, measures, release_until_or_qty, responsible)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(status, s.part_no, s.part_description, s.applicant, JSON.stringify(data), completedAt, authorId)
+    .run(
+      status, s.part_no, s.part_description, s.applicant, JSON.stringify(data), completedAt, authorId,
+      nextQnNo(year), year, s.psw_type, s.supplier_name, s.reason, s.measures, s.release_until_or_qty, s.responsible,
+    )
   return get(Number(res.lastInsertRowid))
 }
 
@@ -177,9 +232,13 @@ export function update(id, { status, data }) {
   db.prepare(
     `UPDATE notifications
         SET status = ?, part_no = ?, part_description = ?, applicant = ?, data = ?,
-            completed_at = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            completed_at = ?, psw_type = ?, supplier_name = ?, reason = ?, measures = ?,
+            release_until_or_qty = ?, responsible = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = ?`,
-  ).run(status, s.part_no, s.part_description, s.applicant, JSON.stringify(data), completedAt, id)
+  ).run(
+    status, s.part_no, s.part_description, s.applicant, JSON.stringify(data), completedAt,
+    s.psw_type, s.supplier_name, s.reason, s.measures, s.release_until_or_qty, s.responsible, id,
+  )
   return get(id)
 }
 
@@ -458,7 +517,7 @@ export function allSigned(id) {
 // Notifications created before accounts existed belong to the oldest account.
 db.exec(`
   UPDATE notifications SET author_id = (SELECT MIN(id) FROM users)
-   WHERE author_id IS NULL AND EXISTS (SELECT 1 FROM users)
+   WHERE author_id IS NULL AND imported = 0 AND EXISTS (SELECT 1 FROM users)
 `)
 
 // Only the note's author may delete it.
@@ -472,4 +531,398 @@ export function deleteComment(notificationId, commentId, userId) {
 
 export function reopenForSigning(id) {
   setStatus(id, 'submitted')
+}
+
+// --- Quality Tracking ------------------------------------------------------
+// One table for the whole company: nothing here is filtered by user. A notification made in the app
+// shows up only once everybody has signed it (status 'signed'); imported rows are 'signed' from the start.
+//
+// A cell shows the value from the notification (form data, or the imported Excel value) unless
+// somebody changed it in the table: that change lives in tracking_values and wins until it is reset.
+// Custom columns (tracking_columns) have no form counterpart; their values live in tracking_values too.
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tracking_columns (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    name     TEXT NOT NULL,
+    type     TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'date', 'list')),
+    options  TEXT NOT NULL DEFAULT '[]'
+  );
+  CREATE TABLE IF NOT EXISTS tracking_values (
+    notification_id  INTEGER NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+    field            TEXT NOT NULL,
+    value            TEXT NOT NULL,
+    user_id          INTEGER,
+    updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (notification_id, field)
+  );
+`)
+
+export const TRACKING_FIRST_YEAR = 2017
+export const TRACKING_STATES = ['offen', 'freigegeben', 'abgeschlossen']
+// the table fields that also exist in the form / the Excel: filled automatically, editable by hand
+export const TRACKING_FIELDS = ['pswType', 'partNo', 'partDesc', 'supplierNo', 'supplierName', 'reason', 'measures', 'releaseUntilOrQty', 'responsible', 'status', 'tracking']
+
+// Status is typed in by hand for notifications made in the app, so it starts empty
+const stateOf = (r) => (r.imported ? r.qn_status : '')
+
+// year -> rows of the table with edits applied
+function loadYear(year) {
+  const rows = db.prepare("SELECT * FROM notifications WHERE status = 'signed' AND qn_year = ?").all(year)
+  const values = db
+    .prepare(
+      `SELECT v.notification_id AS id, v.field, v.value, v.updated_at AS at, u.name AS by
+         FROM tracking_values v JOIN notifications n ON n.id = v.notification_id
+         LEFT JOIN users u ON u.id = v.user_id WHERE n.qn_year = ?`,
+    )
+    .all(year)
+  const byRow = new Map()
+  for (const v of values) {
+    if (!byRow.has(v.id)) byRow.set(v.id, [])
+    byRow.get(v.id).push(v)
+  }
+  return rows
+    .map((r) => {
+      const state = stateOf(r)
+      // For notifications made in the app only QN-Nr. and Artikelnummer come from the form;
+      // everything else is typed in by hand (imported rows carry their Excel values).
+      const own = Boolean(r.imported)
+      const out = {
+        id: r.id,
+        qnNo: r.qn_no,
+        authorId: r.author_id,
+        pswType: own ? r.psw_type : '',
+        partNo: r.part_no,
+        partDesc: own ? r.part_description : '',
+        supplierNo: own ? r.supplier_no : '',
+        supplierName: own ? r.supplier_name : '',
+        reason: own ? r.reason : '',
+        measures: own ? r.measures : '',
+        releaseUntilOrQty: own ? r.release_until_or_qty : '',
+        responsible: own ? r.responsible : '',
+        status: state,
+        tracking: r.imported ? r.tracking_status : '',
+        custom: {},
+        edited: {},
+        // saved notifications made in the app can be turned into a PDF; rows without form cannot
+        hasPdf: !r.imported,
+        imported: Boolean(r.imported),
+      }
+      for (const v of byRow.get(r.id) ?? []) {
+        if (TRACKING_FIELDS.includes(v.field)) {
+          out[v.field] = v.value
+          out.edited[v.field] = { by: v.by, at: v.at }
+        } else out.custom[v.field] = v.value
+      }
+      return out
+    })
+    .sort((a, b) => (parseInt(a.qnNo.slice(3), 10) || 0) - (parseInt(b.qnNo.slice(3), 10) || 0) || a.id - b.id)
+}
+
+export function trackingYears(lastYear) {
+  const rows = db.prepare("SELECT id, imported, status, qn_status, qn_year FROM notifications WHERE status = 'signed' AND qn_year IS NOT NULL").all()
+  const status = new Map(db.prepare("SELECT notification_id AS id, value FROM tracking_values WHERE field = 'status'").all().map((v) => [v.id, v.value]))
+  const byYear = new Map()
+  for (const r of rows) {
+    const y = byYear.get(r.qn_year) ?? { total: 0, open: 0 }
+    y.total++
+    if ((status.get(r.id) ?? stateOf(r)) === 'offen') y.open++
+    byYear.set(r.qn_year, y)
+  }
+  const out = []
+  for (let year = lastYear; year >= TRACKING_FIRST_YEAR; year--) out.push({ year, total: byYear.get(year)?.total ?? 0, open: byYear.get(year)?.open ?? 0 })
+  return out
+}
+
+export function trackingList(year, { status, supplier, responsible, search } = {}) {
+  const needle = (search ?? '').toLowerCase()
+  return loadYear(year).filter(
+    (r) =>
+      (!status || r.status === status) &&
+      (!supplier || r.supplierName === supplier) &&
+      (!responsible || r.responsible === responsible) &&
+      (!needle ||
+        [r.qnNo, ...TRACKING_FIELDS.map((f) => r[f]), ...Object.values(r.custom)].some((v) => String(v ?? '').toLowerCase().includes(needle))),
+  )
+}
+
+export function trackingColumns() {
+  return db
+    .prepare('SELECT id, name, type, options FROM tracking_columns ORDER BY id')
+    .all()
+    .map((c) => ({ ...c, key: `c${c.id}`, options: JSON.parse(c.options) }))
+}
+
+export function addTrackingColumn({ name, type, options }) {
+  const res = db.prepare('INSERT INTO tracking_columns (name, type, options) VALUES (?, ?, ?)').run(name, type, JSON.stringify(options))
+  return trackingColumns().find((c) => c.id === Number(res.lastInsertRowid))
+}
+
+export function updateTrackingColumn(id, { name, options }) {
+  const res = db.prepare('UPDATE tracking_columns SET name = ?, options = ? WHERE id = ?').run(name, JSON.stringify(options), id)
+  return res.changes > 0 ? trackingColumns().find((c) => c.id === id) : null
+}
+
+export function deleteTrackingColumn(id) {
+  db.exec('BEGIN')
+  try {
+    db.prepare('DELETE FROM tracking_values WHERE field = ?').run(`c${id}`)
+    const ok = db.prepare('DELETE FROM tracking_columns WHERE id = ?').run(id).changes > 0
+    db.exec('COMMIT')
+    return ok
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
+  }
+}
+
+// value null = back to what the notification says (custom columns: empty the cell).
+// -> false when the row does not exist; throws nothing for unknown fields: the caller validates them.
+export function setTrackingValue(id, field, value, userId) {
+  if (!db.prepare("SELECT 1 FROM notifications WHERE id = ? AND status = 'signed' AND qn_year IS NOT NULL").get(id)) return false
+  if (value === null || (value === '' && !TRACKING_FIELDS.includes(field))) {
+    db.prepare('DELETE FROM tracking_values WHERE notification_id = ? AND field = ?').run(id, field)
+  } else {
+    db.prepare(
+      `INSERT INTO tracking_values (notification_id, field, value, user_id) VALUES (?, ?, ?, ?)
+       ON CONFLICT (notification_id, field) DO UPDATE SET value = excluded.value, user_id = excluded.user_id,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+    ).run(id, field, value, userId)
+  }
+  return true
+}
+
+// Changes the QN number of a row (the year follows it) -> 'ok' | 'missing' | 'exists'
+export function renameQn(id, qnNo) {
+  if (!db.prepare("SELECT 1 FROM notifications WHERE id = ? AND status = 'signed' AND qn_year IS NOT NULL").get(id)) return 'missing'
+  if (db.prepare('SELECT 1 FROM notifications WHERE qn_no = ? AND id != ?').get(qnNo, id)) return 'exists'
+  db.prepare('UPDATE notifications SET qn_no = ?, qn_year = ? WHERE id = ?').run(qnNo, 2000 + Number(qnNo.slice(0, 2)), id)
+  return 'ok'
+}
+
+export function trackingRow(year, id) {
+  return loadYear(year).find((r) => r.id === id) ?? null
+}
+
+// A row without a form (the Excel is gone, so entries are also typed in here): gets the next QN number.
+export function createTrackingRow(year) {
+  const qnNo = nextQnNo(year)
+  const res = db
+    .prepare(`INSERT INTO notifications (status, author_id, part_no, part_description, data, qn_no, qn_year, imported) VALUES ('signed', NULL, '', '', '{}', ?, ?, 1)`)
+    .run(qnNo, year)
+  return Number(res.lastInsertRowid)
+}
+
+// Only rows without a form can be removed here; notifications made in the app are deleted by their author.
+export function deleteTrackingRow(id) {
+  return db.prepare('DELETE FROM notifications WHERE id = ? AND imported = 1').run(id).changes > 0
+}
+
+// Import of a row of the Excel overview; false when the QN number exists already.
+export function importTracking(row) {
+  if (db.prepare('SELECT 1 FROM notifications WHERE qn_no = ?').get(row.qnNo)) return false
+  db.prepare(
+    `INSERT INTO notifications (status, author_id, part_no, part_description, data, qn_no, qn_year, psw_type,
+                                supplier_no, supplier_name, reason, measures, release_until_or_qty, responsible,
+                                qn_status, tracking_status, imported)
+     VALUES ('signed', NULL, ?, ?, '{}', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+  ).run(
+    row.partNo, row.partDesc, row.qnNo, 2000 + Number(row.qnNo.slice(0, 2)), row.pswType, row.supplierNo,
+    row.supplierName, row.reason, row.measures, row.releaseUntilOrQty, row.responsible, row.status, row.tracking,
+  )
+  return true
+}
+
+// --- Sonderfreigaben Tracking ------------------------------------------------
+// Same idea as the Quality Notifications tracking, but there is no form behind these rows:
+// the table itself is the record (imported from the Excel overviews, then typed in here).
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sonderfreigaben (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    sfr_no                TEXT NOT NULL UNIQUE,
+    year                  INTEGER NOT NULL,
+    psw_type              TEXT NOT NULL DEFAULT '',
+    part_no               TEXT NOT NULL DEFAULT '',
+    part_desc             TEXT NOT NULL DEFAULT '',
+    supplier_no           TEXT NOT NULL DEFAULT '',
+    supplier_name         TEXT NOT NULL DEFAULT '',
+    reason                TEXT NOT NULL DEFAULT '',
+    measures              TEXT NOT NULL DEFAULT '',
+    release_until_or_qty  TEXT NOT NULL DEFAULT '',
+    responsible           TEXT NOT NULL DEFAULT '',
+    doku                  TEXT NOT NULL DEFAULT '',
+    status                TEXT NOT NULL DEFAULT '',
+    tracking              TEXT NOT NULL DEFAULT '',
+    updated_by            INTEGER,
+    updated_at            TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_sonderfreigaben_year ON sonderfreigaben (year);
+  CREATE TABLE IF NOT EXISTS sf_columns (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    name     TEXT NOT NULL,
+    type     TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'date', 'list')),
+    options  TEXT NOT NULL DEFAULT '[]'
+  );
+  CREATE TABLE IF NOT EXISTS sf_values (
+    sf_id  INTEGER NOT NULL REFERENCES sonderfreigaben(id) ON DELETE CASCADE,
+    field  TEXT NOT NULL,
+    value  TEXT NOT NULL,
+    PRIMARY KEY (sf_id, field)
+  );
+`)
+
+// API field -> column
+const SF_COLUMNS = {
+  pswType: 'psw_type',
+  partNo: 'part_no',
+  partDesc: 'part_desc',
+  supplierNo: 'supplier_no',
+  supplierName: 'supplier_name',
+  reason: 'reason',
+  measures: 'measures',
+  releaseUntilOrQty: 'release_until_or_qty',
+  responsible: 'responsible',
+  doku: 'doku',
+  status: 'status',
+  tracking: 'tracking',
+}
+export const SF_FIELDS = Object.keys(SF_COLUMNS)
+
+// Tracking decides: offen / freigegeben / abgeschlossen (the Status column of the old sheets holds anything)
+const sfState = (tracking) => {
+  const v = tracking.trim().toLowerCase()
+  return v === 'open' ? 'offen' : v
+}
+
+function sfRows(where = '', params = []) {
+  const rows = db.prepare(`SELECT * FROM sonderfreigaben ${where}`).all(...params)
+  const values = new Map()
+  for (const v of db
+    .prepare(`SELECT sf_id, field, value FROM sf_values WHERE sf_id IN (SELECT id FROM sonderfreigaben ${where})`)
+    .all(...params)) {
+    if (!values.has(v.sf_id)) values.set(v.sf_id, {})
+    values.get(v.sf_id)[v.field] = v.value
+  }
+  return rows
+    .map((r) => ({
+      id: r.id,
+      qnNo: r.sfr_no,
+      ...Object.fromEntries(SF_FIELDS.map((f) => [f, r[SF_COLUMNS[f]]])),
+      state: sfState(r.tracking),
+      custom: values.get(r.id) ?? {},
+      edited: {},
+      hasPdf: false,
+      imported: true,
+    }))
+    .sort((a, b) => (parseInt(a.qnNo.split('-').pop(), 10) || 0) - (parseInt(b.qnNo.split('-').pop(), 10) || 0) || a.id - b.id)
+}
+
+export function sfYears(lastYear) {
+  const byYear = new Map()
+  for (const r of db.prepare('SELECT year, tracking FROM sonderfreigaben').all()) {
+    const y = byYear.get(r.year) ?? { total: 0, open: 0 }
+    y.total++
+    if (sfState(r.tracking) === 'offen') y.open++
+    byYear.set(r.year, y)
+  }
+  const out = []
+  for (let year = lastYear; year >= TRACKING_FIRST_YEAR; year--) out.push({ year, total: byYear.get(year)?.total ?? 0, open: byYear.get(year)?.open ?? 0 })
+  return out
+}
+
+export function sfList(year, { status, supplier, responsible, search } = {}) {
+  const needle = (search ?? '').toLowerCase()
+  return sfRows('WHERE year = ?', [year]).filter(
+    (r) =>
+      (!status || r.state === status) &&
+      (!supplier || r.supplierName === supplier) &&
+      (!responsible || r.responsible === responsible) &&
+      (!needle || [r.qnNo, ...SF_FIELDS.map((f) => r[f]), ...Object.values(r.custom)].some((v) => String(v ?? '').toLowerCase().includes(needle))),
+  )
+}
+
+export function sfRow(id) {
+  return sfRows('WHERE id = ?', [id])[0] ?? null
+}
+
+export const sfColumns = () =>
+  db
+    .prepare('SELECT id, name, type, options FROM sf_columns ORDER BY id')
+    .all()
+    .map((c) => ({ ...c, key: `c${c.id}`, options: JSON.parse(c.options) }))
+
+export function addSfColumn({ name, type, options }) {
+  const res = db.prepare('INSERT INTO sf_columns (name, type, options) VALUES (?, ?, ?)').run(name, type, JSON.stringify(options))
+  return sfColumns().find((c) => c.id === Number(res.lastInsertRowid))
+}
+
+export function updateSfColumn(id, { name, options }) {
+  const res = db.prepare('UPDATE sf_columns SET name = ?, options = ? WHERE id = ?').run(name, JSON.stringify(options), id)
+  return res.changes > 0 ? sfColumns().find((c) => c.id === id) : null
+}
+
+export function deleteSfColumn(id) {
+  db.exec('BEGIN')
+  try {
+    db.prepare('DELETE FROM sf_values WHERE field = ?').run(`c${id}`)
+    const ok = db.prepare('DELETE FROM sf_columns WHERE id = ?').run(id).changes > 0
+    db.exec('COMMIT')
+    return ok
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
+  }
+}
+
+// field: a column of the table, "qnNo" (the SFR number, the year follows it) or a custom column "c<id>".
+// -> 'ok' | 'missing' | 'exists' ; null/'' empties a custom cell
+export function setSfValue(id, field, value, userId) {
+  if (!db.prepare('SELECT 1 FROM sonderfreigaben WHERE id = ?').get(id)) return 'missing'
+  if (field === 'qnNo') {
+    if (db.prepare('SELECT 1 FROM sonderfreigaben WHERE sfr_no = ? AND id != ?').get(value, id)) return 'exists'
+    db.prepare('UPDATE sonderfreigaben SET sfr_no = ?, year = ? WHERE id = ?').run(value, 2000 + Number(value.match(/\d{2}/)[0]), id)
+  } else if (SF_COLUMNS[field]) {
+    db.prepare(`UPDATE sonderfreigaben SET ${SF_COLUMNS[field]} = ?, updated_by = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`).run(
+      value ?? '',
+      userId,
+      id,
+    )
+  } else if (value === null || value === '') {
+    db.prepare('DELETE FROM sf_values WHERE sf_id = ? AND field = ?').run(id, field)
+  } else {
+    db.prepare('INSERT INTO sf_values (sf_id, field, value) VALUES (?, ?, ?) ON CONFLICT (sf_id, field) DO UPDATE SET value = excluded.value').run(id, field, value)
+  }
+  return 'ok'
+}
+
+// Next free number of a year: SFR26-01, continuing the highest one
+function nextSfrNo(year) {
+  const yy = String(year % 100).padStart(2, '0')
+  const row = db
+    .prepare('SELECT MAX(CAST(SUBSTR(sfr_no, 7) AS INTEGER)) AS n FROM sonderfreigaben WHERE year = ? AND sfr_no GLOB ?')
+    .get(year, `SFR${yy}-[0-9]*`)
+  return `SFR${yy}-${String((row.n ?? 0) + 1).padStart(2, '0')}`
+}
+
+export function createSf(year) {
+  return Number(db.prepare('INSERT INTO sonderfreigaben (sfr_no, year) VALUES (?, ?)').run(nextSfrNo(year), year).lastInsertRowid)
+}
+
+export function deleteSf(id) {
+  return db.prepare('DELETE FROM sonderfreigaben WHERE id = ?').run(id).changes > 0
+}
+
+// Import of a row of an Excel overview; false when the number exists already.
+export function importSonderfreigabe(row) {
+  if (db.prepare('SELECT 1 FROM sonderfreigaben WHERE sfr_no = ?').get(row.qnNo)) return false
+  db.prepare(
+    `INSERT INTO sonderfreigaben (sfr_no, year, psw_type, part_no, part_desc, supplier_no, supplier_name, reason,
+                                  measures, release_until_or_qty, responsible, doku, status, tracking)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    row.qnNo, 2000 + Number(row.qnNo.match(/\d{2}/)[0]), row.pswType, row.partNo, row.partDesc, row.supplierNo,
+    row.supplierName, row.reason, row.measures, row.releaseUntilOrQty, row.responsible, row.doku, row.status, row.tracking,
+  )
+  return true
 }

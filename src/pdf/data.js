@@ -11,6 +11,7 @@ export const emptyData = {
   partNo: '',
   partDesc: '',
   qnNo: '',
+  pswType: '', // 'Serie' | 'Projekt' | '' (Quality Tracking only, not printed)
   batchNo: '',
   batchQty: '',
   applicant: '',

@@ -4,6 +4,8 @@ import LanguageSwitch from './components/LanguageSwitch.jsx'
 import FormPage from './components/FormPage.jsx'
 import ListPage, { KINDS } from './components/ListPage.jsx'
 import AuthPage from './components/AuthPage.jsx'
+import TrackingYears from './components/TrackingYears.jsx'
+import TrackingTable from './components/TrackingTable.jsx'
 import ProfileDialog from './components/ProfileDialog.jsx'
 import { api, setUnauthorizedHandler } from './api.js'
 
@@ -13,6 +15,8 @@ const BASE = import.meta.env.BASE_URL
 //   #/            landing      #/form        new notification
 //   #/form/<id>   edit one     #/drafts      draft list      #/history   completed list
 //   #/review      notifications sent to me for review
+//   #/tracking    Quality Notifications Tracking year picker      #/tracking/<year>   table of that year
+//   #/sonderfreigaben, #/sonderfreigaben/<year>   the same for the Sonderfreigaben
 function parseRoute() {
   const h = location.hash.replace(/^#/, '')
   // ?for=<userId> comes from mail links: the form only opens for that account
@@ -25,6 +29,12 @@ function parseRoute() {
   if (h === '/changes') return { name: 'changes' }
   if (h === '/history') return { name: 'history' }
   if (h === '/review') return { name: 'review' }
+  if (h === '/tracking') return { name: 'tracking' }
+  if (h === '/sonderfreigaben') return { name: 'sonderfreigaben' }
+  const ty = h.match(/^\/tracking\/(\d{4})$/)
+  if (ty) return { name: 'trackingYear', year: Number(ty[1]) }
+  const sy = h.match(/^\/sonderfreigaben\/(\d{4})$/)
+  if (sy) return { name: 'sonderfreigabenYear', year: Number(sy[1]) }
   return { name: 'landing' }
 }
 
@@ -133,6 +143,18 @@ function Shell() {
       {user && route.name === 'review' && (
         <ListPage key="review" kind="review" onOpen={(id) => go(`#/form/${id}`)} onBack={() => go('#/')} />
       )}
+      {user && route.name === 'tracking' && (
+        <TrackingYears onOpen={(year) => go(`#/tracking/${year}`)} onBack={() => go('#/')} />
+      )}
+      {user && route.name === 'trackingYear' && (
+        <TrackingTable key={route.year} user={user} year={route.year} onOpen={(id) => go(`#/form/${id}`)} onBack={() => go('#/tracking')} />
+      )}
+      {user && route.name === 'sonderfreigaben' && (
+        <TrackingYears kind="sf" onOpen={(year) => go(`#/sonderfreigaben/${year}`)} onBack={() => go('#/')} />
+      )}
+      {user && route.name === 'sonderfreigabenYear' && (
+        <TrackingTable kind="sf" key={`sf${route.year}`} year={route.year} onOpen={() => {}} onBack={() => go('#/sonderfreigaben')} />
+      )}
       {user && profileOpen && (
         <ProfileDialog
           user={user}
@@ -169,6 +191,17 @@ function Shell() {
               </div>
             ))}
           </div>
+          <section className="landing-tracking" aria-label={t('trackingSection')}>
+            <h2>{t('trackingSection')}</h2>
+            <div className="landing-tracking-grid">
+              <button type="button" className="btn big" onClick={() => go('#/tracking')}>
+                {t('qualityTracking')}
+              </button>
+              <button type="button" className="btn big" onClick={() => go('#/sonderfreigaben')}>
+                {t('sonderfreigabenTracking')}
+              </button>
+            </div>
+          </section>
         </main>
       )}
     </div>
